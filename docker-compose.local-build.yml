@@ -1,0 +1,12 @@
+# 与 docker-compose.yml 合并使用，从本地 Dockerfile 构建 new-api 镜像。
+# 启动示例：
+#   docker compose -f docker-compose.yml -f docker-compose.local-build.yml up -d --build
+#
+# 详见 docs/docker-local-build-deploy.md
+
+services:
+  new-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: new-api:local
