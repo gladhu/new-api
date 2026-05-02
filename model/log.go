@@ -336,6 +336,14 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		return nil, 0, err
 	}
 
+	if err = fillLogChannelNames(logs); err != nil {
+		return logs, total, err
+	}
+
+	return logs, total, err
+}
+
+func fillLogChannelNames(logs []*Log) error {
 	channelIds := types.NewSet[int]()
 	for _, log := range logs {
 		if log.ChannelId != 0 {
@@ -343,40 +351,106 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		}
 	}
 
-	if channelIds.Len() > 0 {
-		var channels []struct {
-			Id   int    `gorm:"column:id"`
-			Name string `gorm:"column:name"`
-		}
-		if common.MemoryCacheEnabled {
-			// Cache get channel
-			for _, channelId := range channelIds.Items() {
-				if cacheChannel, err := CacheGetChannel(channelId); err == nil {
-					channels = append(channels, struct {
-						Id   int    `gorm:"column:id"`
-						Name string `gorm:"column:name"`
-					}{
-						Id:   channelId,
-						Name: cacheChannel.Name,
-					})
-				}
-			}
-		} else {
-			// Bulk query channels from DB
-			if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
-				return logs, total, err
+	if channelIds.Len() == 0 {
+		return nil
+	}
+	var channels []struct {
+		Id   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	if common.MemoryCacheEnabled {
+		for _, channelId := range channelIds.Items() {
+			if cacheChannel, err := CacheGetChannel(channelId); err == nil {
+				channels = append(channels, struct {
+					Id   int    `gorm:"column:id"`
+					Name string `gorm:"column:name"`
+				}{
+					Id:   channelId,
+					Name: cacheChannel.Name,
+				})
 			}
 		}
-		channelMap := make(map[int]string, len(channels))
-		for _, channel := range channels {
-			channelMap[channel.Id] = channel.Name
-		}
-		for i := range logs {
-			logs[i].ChannelName = channelMap[logs[i].ChannelId]
+	} else {
+		if err := DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
+			return err
 		}
 	}
+	channelMap := make(map[int]string, len(channels))
+	for _, channel := range channels {
+		channelMap[channel.Id] = channel.Name
+	}
+	for i := range logs {
+		logs[i].ChannelName = channelMap[logs[i].ChannelId]
+	}
+	return nil
+}
 
-	return logs, total, err
+const adminUserLogExportMaxRows = 100000
+
+// AdminUserMonthRangeSeconds returns inclusive unix seconds for the calendar month in loc.
+func AdminUserMonthRangeSeconds(year, month int, loc *time.Location) (startSec, endSec int64, err error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	if year < 1970 || year > 9999 || month < 1 || month > 12 {
+		return 0, 0, errors.New("invalid year or month")
+	}
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0).Add(-time.Nanosecond)
+	return start.Unix(), end.Unix(), nil
+}
+
+// GetUserConsumeLogsForAdminExport returns consume logs in [startTimestamp, endTimestamp] ordered by id ascending.
+func GetUserConsumeLogsForAdminExport(userId int, startTimestamp, endTimestamp int64) (logs []*Log, err error) {
+	tx := LOG_DB.Where("logs.user_id = ? AND logs.type = ?", userId, LogTypeConsume).
+		Where("logs.created_at >= ? AND logs.created_at <= ?", startTimestamp, endTimestamp)
+	var total int64
+	if err = tx.Model(&Log{}).Count(&total).Error; err != nil {
+		return nil, err
+	}
+	if total > adminUserLogExportMaxRows {
+		return nil, fmt.Errorf("记录数超过导出上限 %d 条，请缩小时间范围", adminUserLogExportMaxRows)
+	}
+	err = tx.Order("logs.id asc").Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+	if err = fillLogChannelNames(logs); err != nil {
+		return nil, err
+	}
+	return logs, nil
+}
+
+type AdminUserMonthLogTypeAgg struct {
+	Type     int   `json:"type" gorm:"column:type"`
+	Cnt      int64 `json:"cnt" gorm:"column:cnt"`
+	QuotaSum int64 `json:"quota_sum" gorm:"column:quota_sum"`
+}
+
+func GetUserLogTypeAggregatesForRange(userId int, startTimestamp, endTimestamp int64) (rows []AdminUserMonthLogTypeAgg, err error) {
+	err = LOG_DB.Model(&Log{}).
+		Select("type, COUNT(*) AS cnt, COALESCE(SUM(quota), 0) AS quota_sum").
+		Where("user_id = ? AND created_at >= ? AND created_at <= ?", userId, startTimestamp, endTimestamp).
+		Group("type").
+		Scan(&rows).Error
+	return rows, err
+}
+
+type AdminUserMonthModelAgg struct {
+	ModelName     string `json:"model_name" gorm:"column:model_name"`
+	Cnt           int64  `json:"cnt" gorm:"column:cnt"`
+	QuotaSum      int64  `json:"quota_sum" gorm:"column:quota_sum"`
+	PromptSum     int64  `json:"prompt_sum" gorm:"column:prompt_sum"`
+	CompletionSum int64  `json:"completion_sum" gorm:"column:completion_sum"`
+}
+
+func GetUserConsumeSummaryByModelForRange(userId int, startTimestamp, endTimestamp int64) (rows []AdminUserMonthModelAgg, err error) {
+	err = LOG_DB.Model(&Log{}).
+		Select("model_name, COUNT(*) AS cnt, COALESCE(SUM(quota), 0) AS quota_sum, COALESCE(SUM(prompt_tokens), 0) AS prompt_sum, COALESCE(SUM(completion_tokens), 0) AS completion_sum").
+		Where("user_id = ? AND type = ? AND created_at >= ? AND created_at <= ?", userId, LogTypeConsume, startTimestamp, endTimestamp).
+		Group("model_name").
+		Scan(&rows).Error
+	return rows, err
 }
 
 const logSearchCountLimit = 10000
