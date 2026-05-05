@@ -9,7 +9,10 @@ import {
   DEFAULT_TIME_GRANULARITY,
   MODEL_ANALYTICS_CHART_OPTIONS,
 } from '@/features/dashboard/constants'
-import { processChartData } from '@/features/dashboard/lib'
+import {
+  processChartData,
+  type ChartTimeRange,
+} from '@/features/dashboard/lib'
 import type {
   ModelAnalyticsChartTab,
   QuotaDataItem,
@@ -30,6 +33,7 @@ const CHART_SPEC_KEYS: Record<ModelAnalyticsChartTab, ChartSpecKey> = {
 interface ModelChartsProps {
   data: QuotaDataItem[]
   loading?: boolean
+  chartTimeRange?: ChartTimeRange
   timeGranularity?: TimeGranularity
   defaultChartTab?: ModelAnalyticsChartTab
 }
@@ -70,8 +74,20 @@ export function ModelCharts(props: ModelChartsProps) {
   }, [resolvedTheme])
 
   const chartData = useMemo(
-    () => processChartData(props.loading ? [] : props.data, timeGranularity, t),
-    [props.data, props.loading, timeGranularity, t]
+    () =>
+      processChartData(
+        props.loading ? [] : props.data,
+        timeGranularity,
+        t,
+        props.chartTimeRange
+      ),
+    [
+      props.chartTimeRange,
+      props.data,
+      props.loading,
+      timeGranularity,
+      t,
+    ]
   )
 
   const spec = chartData[CHART_SPEC_KEYS[activeTab]]
@@ -110,7 +126,7 @@ export function ModelCharts(props: ModelChartsProps) {
       <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
         {themeReady && spec && (
           <VChart
-            key={`${activeTab}-${resolvedTheme}`}
+            key={`${activeTab}-${resolvedTheme}-${props.chartTimeRange?.start_timestamp ?? 0}-${props.chartTimeRange?.end_timestamp ?? 0}-${timeGranularity}`}
             spec={{
               ...spec,
               theme: resolvedTheme === 'dark' ? 'dark' : 'light',

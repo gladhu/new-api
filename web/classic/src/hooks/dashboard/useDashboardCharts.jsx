@@ -396,7 +396,7 @@ export const useDashboardCharts = (
   }, []);
 
   const updateChartData = useCallback(
-    (data) => {
+    (data, chartTimeRangeSec) => {
       const processedData = processRawData(
         data,
         dataExportDefaultTime,
@@ -430,6 +430,7 @@ export const useDashboardCharts = (
       const aggregatedData = aggregateDataByTimeAndModel(
         data,
         dataExportDefaultTime,
+        chartTimeRangeSec,
       );
 
       const modelTotals = new Map();
@@ -448,6 +449,7 @@ export const useDashboardCharts = (
         aggregatedData,
         data,
         dataExportDefaultTime,
+        chartTimeRangeSec,
       );
 
       let newLineData = [];

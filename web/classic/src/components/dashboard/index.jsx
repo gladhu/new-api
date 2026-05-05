@@ -95,10 +95,15 @@ const Dashboard = () => {
     }
   };
 
+  const getChartTimeRangeSec = () => ({
+    start_timestamp: Date.parse(dashboardData.inputs.start_timestamp) / 1000,
+    end_timestamp: Date.parse(dashboardData.inputs.end_timestamp) / 1000,
+  });
+
   const initChart = async () => {
     await dashboardData.loadQuotaData().then((data) => {
       if (data && data.length > 0) {
-        dashboardCharts.updateChartData(data);
+        dashboardCharts.updateChartData(data, getChartTimeRangeSec());
       }
     });
     await loadUserData();
@@ -108,7 +113,7 @@ const Dashboard = () => {
   const handleRefresh = async () => {
     const data = await dashboardData.refresh();
     if (data && data.length > 0) {
-      dashboardCharts.updateChartData(data);
+      dashboardCharts.updateChartData(data, getChartTimeRangeSec());
     }
     await loadUserData();
   };

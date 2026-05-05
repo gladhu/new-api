@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { Filter, RotateCcw, Calendar, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import {
+  getCalendarDayRangeInclusive,
+  getEndOfDay,
+  getStartOfDay,
+  type TimeGranularity,
+} from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -78,9 +83,17 @@ export function ModelsFilter(props: ModelsFilterProps) {
   }, [props.preferences])
 
   const handleApply = () => {
+    const normalized = { ...filters }
+    if (normalized.start_timestamp) {
+      normalized.start_timestamp = getStartOfDay(normalized.start_timestamp)
+    }
+    if (normalized.end_timestamp) {
+      normalized.end_timestamp = getEndOfDay(normalized.end_timestamp)
+    }
+    setFilters(normalized)
     props.onFilterChange(
       cleanFilters(
-        filters as unknown as Record<string, unknown>
+        normalized as unknown as Record<string, unknown>
       ) as typeof filters
     )
     setOpen(false)
@@ -88,7 +101,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
 
   const handleReset = () => {
     const days = props.preferences.defaultTimeRangeDays
-    const { start, end } = getRollingDateRange(days)
+    const { start, end } = getCalendarDayRangeInclusive(days)
     setFilters({
       ...buildDefaultDashboardFilters(props.preferences),
       start_timestamp: start,
@@ -109,7 +122,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
   }
 
   const handleQuickRange = (days: number) => {
-    const { start, end } = getRollingDateRange(days)
+    const { start, end } = getCalendarDayRangeInclusive(days)
 
     setFilters((prev) => ({
       ...prev,

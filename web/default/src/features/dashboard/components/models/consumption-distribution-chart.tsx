@@ -9,7 +9,10 @@ import {
   CONSUMPTION_DISTRIBUTION_CHART_OPTIONS,
   DEFAULT_TIME_GRANULARITY,
 } from '@/features/dashboard/constants'
-import { processChartData } from '@/features/dashboard/lib'
+import {
+  processChartData,
+  type ChartTimeRange,
+} from '@/features/dashboard/lib'
 import type {
   ConsumptionDistributionChartType,
   QuotaDataItem,
@@ -22,6 +25,7 @@ let themeManagerPromise: Promise<
 interface ConsumptionDistributionChartProps {
   data: QuotaDataItem[]
   loading?: boolean
+  chartTimeRange?: ChartTimeRange
   timeGranularity?: TimeGranularity
   defaultChartType?: ConsumptionDistributionChartType
 }
@@ -70,8 +74,20 @@ export function ConsumptionDistributionChart(
   }, [resolvedTheme])
 
   const chartData = useMemo(
-    () => processChartData(props.loading ? [] : props.data, timeGranularity, t),
-    [props.data, props.loading, timeGranularity, t]
+    () =>
+      processChartData(
+        props.loading ? [] : props.data,
+        timeGranularity,
+        t,
+        props.chartTimeRange
+      ),
+    [
+      props.chartTimeRange,
+      props.data,
+      props.loading,
+      timeGranularity,
+      t,
+    ]
   )
   const spec = chartType === 'bar' ? chartData.spec_line : chartData.spec_area
 
@@ -113,7 +129,7 @@ export function ConsumptionDistributionChart(
       <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
         {themeReady && spec && (
           <VChart
-            key={`${chartType}-${resolvedTheme}`}
+            key={`${chartType}-${resolvedTheme}-${props.chartTimeRange?.start_timestamp ?? 0}-${props.chartTimeRange?.end_timestamp ?? 0}-${timeGranularity}`}
             spec={{
               ...spec,
               theme: resolvedTheme === 'dark' ? 'dark' : 'light',

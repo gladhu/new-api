@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
+import { computeTimeRange } from '@/lib/time'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth-store'
@@ -13,6 +14,7 @@ import {
 } from '@/components/page-transition'
 import {
   buildDefaultDashboardFilters,
+  getDefaultDays,
   getSavedChartPreferences,
   saveChartPreferences,
 } from './lib'
@@ -123,6 +125,20 @@ export function Dashboard() {
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
     buildDefaultDashboardFilters(getSavedChartPreferences())
+  )
+
+  const modelChartTimeRange = useMemo(
+    () =>
+      computeTimeRange(
+        getDefaultDays(modelFilters.time_granularity),
+        modelFilters.start_timestamp,
+        modelFilters.end_timestamp
+      ),
+    [
+      modelFilters.start_timestamp,
+      modelFilters.end_timestamp,
+      modelFilters.time_granularity,
+    ]
   )
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
@@ -248,6 +264,7 @@ export function Dashboard() {
                   <LazyConsumptionDistributionChart
                     data={modelData}
                     loading={dataLoading}
+                    chartTimeRange={modelChartTimeRange}
                     defaultChartType={
                       chartPreferences.consumptionDistributionChart
                     }
@@ -262,6 +279,7 @@ export function Dashboard() {
                   <LazyModelCharts
                     data={modelData}
                     loading={dataLoading}
+                    chartTimeRange={modelChartTimeRange}
                     defaultChartTab={chartPreferences.modelAnalyticsChart}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY

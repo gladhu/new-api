@@ -1,6 +1,10 @@
 import { dataScheme as vchartDefaultDataScheme } from '@visactor/vchart/esm/theme/color-scheme/builtin/default'
 import { getCurrencyDisplay } from '@/lib/currency'
-import { formatChartTime, type TimeGranularity } from '@/lib/time'
+import {
+  formatChartTime,
+  toStartOfDay,
+  type TimeGranularity,
+} from '@/lib/time'
 import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
 import type {
   QuotaDataItem,
@@ -9,6 +13,14 @@ import type {
 } from '@/features/dashboard/types'
 
 type TFunction = (key: string) => string
+
+/** Upper bound for generated axis buckets (e.g. ~1 year of daily points). */
+const MAX_CHART_AXIS_BUCKETS = 400
+
+export type ChartTimeRange = {
+  start_timestamp: number
+  end_timestamp: number
+}
 type TooltipLineItem = {
   key: string
   value: string | number
@@ -49,7 +61,8 @@ function renderQuotaCompat(rawQuota: number, digits = 4): string {
 export function processChartData(
   data: QuotaDataItem[],
   timeGranularity: TimeGranularity = 'day',
-  t?: TFunction
+  t?: TFunction,
+  timeRange?: ChartTimeRange
 ): ProcessedChartData {
   const tt: TFunction = t ?? ((x) => x)
   const otherLabel = tt('Other')
@@ -250,28 +263,55 @@ export function processChartData(
     range: modelColorRange,
   }
 
-  // Pad time points if too few (default 7 points)
   const MAX_TREND_POINTS = MAX_CHART_TREND_POINTS
-  const fillTimePoints = (times: string[]) => {
-    if (times.length >= MAX_TREND_POINTS) return times
-    const lastTime = Math.max(
-      ...data.map((item) => Number(item.created_at) || 0)
-    )
-    const intervalSec =
-      timeGranularity === 'week'
-        ? 604800
-        : timeGranularity === 'day'
-          ? 86400
-          : 3600
-    const padded = Array.from({ length: MAX_TREND_POINTS }, (_, i) =>
-      formatChartTime(
-        lastTime - (MAX_TREND_POINTS - 1 - i) * intervalSec,
-        timeGranularity
+  const intervalSec =
+    timeGranularity === 'week'
+      ? 604800
+      : timeGranularity === 'day'
+        ? 86400
+        : 3600
+
+  /**
+   * Build X-axis time buckets aligned to the dashboard filter range when provided.
+   * Legacy behavior padded from the latest data timestamp, which ignored the selected period.
+   */
+  const buildChartAxisTimes = (): string[] => {
+    if (timeRange) {
+      let cursor =
+        timeGranularity === 'hour'
+          ? Math.floor(timeRange.start_timestamp / 3600) * 3600
+          : toStartOfDay(timeRange.start_timestamp)
+      const endTs = timeRange.end_timestamp
+      const buckets: string[] = []
+      while (cursor <= endTs && buckets.length < MAX_CHART_AXIS_BUCKETS) {
+        buckets.push(formatChartTime(cursor, timeGranularity))
+        cursor += intervalSec
+      }
+      if (buckets.length === 0) {
+        return sortedTimes.length > 0 ? sortedTimes : buckets
+      }
+      const merged = new Set([...buckets, ...sortedTimes])
+      return Array.from(merged).sort((a, b) => a.localeCompare(b))
+    }
+
+    const fillTimePoints = (times: string[]) => {
+      if (times.length >= MAX_TREND_POINTS) return times
+      if (data.length === 0) return times
+      const lastTime = Math.max(
+        ...data.map((item) => Number(item.created_at) || 0)
       )
-    )
-    return padded
+      const padded = Array.from({ length: MAX_TREND_POINTS }, (_, i) =>
+        formatChartTime(
+          lastTime - (MAX_TREND_POINTS - 1 - i) * intervalSec,
+          timeGranularity
+        )
+      )
+      return padded
+    }
+    return fillTimePoints(sortedTimes)
   }
-  const chartTimes = fillTimePoints(sortedTimes)
+
+  const chartTimes = buildChartAxisTimes()
 
   const totalTimes = Array.from(modelTotalsMap.values()).reduce(
     (sum, x) => sum + (Number(x.count) || 0),

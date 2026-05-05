@@ -46,7 +46,7 @@ const DashboardSetting = () => {
 
     /* 数据看板 */
     DataExportEnabled: false,
-    DataExportDefaultTime: 'hour',
+    DataExportDefaultTime: 'day',
     DataExportInterval: 5,
   });
 

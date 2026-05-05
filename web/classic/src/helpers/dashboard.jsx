@@ -39,7 +39,7 @@ import {
 
 // ========== 时间相关工具函数 ==========
 export const getDefaultTime = () => {
-  return localStorage.getItem(STORAGE_KEYS.DATA_EXPORT_DEFAULT_TIME) || 'hour';
+  return localStorage.getItem(STORAGE_KEYS.DATA_EXPORT_DEFAULT_TIME) || 'day';
 };
 
 export const getTimeInterval = (timeType, isSeconds = false) => {
@@ -49,17 +49,56 @@ export const getTimeInterval = (timeType, isSeconds = false) => {
 };
 
 export const getInitialTimestamp = () => {
-  const defaultTime = getDefaultTime();
-  const now = new Date().getTime() / 1000;
+  return getInitialDashboardRangeStrings().start_timestamp;
+};
 
-  switch (defaultTime) {
-    case 'hour':
-      return timestamp2string(now - 86400);
-    case 'week':
-      return timestamp2string(now - 86400 * 30);
-    default:
-      return timestamp2string(now - 86400 * 7);
+function dashboardStartOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function dashboardEndOfDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+/** @param {number} numDays inclusive calendar days ending at `fromDate` */
+export const getCalendarDayRangeStrings = (numDays, fromDate = new Date()) => {
+  const end = dashboardEndOfDay(fromDate);
+  const startBase = new Date(fromDate);
+  startBase.setDate(startBase.getDate() - (numDays - 1));
+  const start = dashboardStartOfDay(startBase);
+  return {
+    start_timestamp: timestamp2string(Math.floor(start.getTime() / 1000)),
+    end_timestamp: timestamp2string(Math.floor(end.getTime() / 1000)),
+  };
+};
+
+/** Default dashboard filter range: 00:00 start, 23:59:59 end, by saved granularity preset. */
+export const getInitialDashboardRangeStrings = () => {
+  const defaultTime = getDefaultTime();
+  const numDays =
+    defaultTime === 'hour' ? 1 : defaultTime === 'week' ? 30 : 7;
+  return getCalendarDayRangeStrings(numDays);
+};
+
+export const normalizeDashboardTimestampStrings = (
+  start_timestamp,
+  end_timestamp,
+) => {
+  const startMs = Date.parse(start_timestamp);
+  const endMs = Date.parse(end_timestamp);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return { start_timestamp, end_timestamp };
   }
+  const start = dashboardStartOfDay(new Date(startMs));
+  const end = dashboardEndOfDay(new Date(endMs));
+  return {
+    start_timestamp: timestamp2string(Math.floor(start.getTime() / 1000)),
+    end_timestamp: timestamp2string(Math.floor(end.getTime() / 1000)),
+  };
 };
 
 // ========== 数据处理工具函数 ==========
@@ -328,11 +367,33 @@ export const calculateTrendData = (
   };
 };
 
-export const aggregateDataByTimeAndModel = (data, dataExportDefaultTime) => {
+/** Local midnight as Unix seconds */
+function toStartOfDaySec(sec) {
+  const d = new Date(sec * 1000);
+  d.setHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+}
+
+/** Upper bound for axis buckets (matches default-theme dashboard charts). */
+const MAX_CHART_AXIS_BUCKETS = 400;
+
+export const aggregateDataByTimeAndModel = (
+  data,
+  dataExportDefaultTime,
+  chartTimeRangeSec,
+) => {
   const aggregatedData = new Map();
 
-  // 检查数据是否跨年
-  const showYear = isDataCrossYear(data.map((item) => item.created_at));
+  const rangeTs =
+    chartTimeRangeSec &&
+    typeof chartTimeRangeSec.start_timestamp === 'number' &&
+    typeof chartTimeRangeSec.end_timestamp === 'number'
+      ? [chartTimeRangeSec.start_timestamp, chartTimeRangeSec.end_timestamp]
+      : [];
+  const showYear = isDataCrossYear([
+    ...data.map((item) => item.created_at),
+    ...rangeTs,
+  ]);
 
   data.forEach((item) => {
     const timeKey = timestamp2string1(
@@ -364,19 +425,64 @@ export const generateChartTimePoints = (
   aggregatedData,
   data,
   dataExportDefaultTime,
+  chartTimeRangeSec,
 ) => {
-  let chartTimePoints = Array.from(
+  const fromData = Array.from(
     new Set([...aggregatedData.values()].map((d) => d.time)),
   );
 
-  if (chartTimePoints.length < DEFAULTS.MAX_TREND_POINTS) {
+  const mergeAndSort = (a, b) => {
+    const merged = new Set([...a, ...b]);
+    return Array.from(merged).sort((x, y) => x.localeCompare(y));
+  };
+
+  const startTs = chartTimeRangeSec?.start_timestamp;
+  const endTs = chartTimeRangeSec?.end_timestamp;
+  const hasValidRange =
+    typeof startTs === 'number' &&
+    typeof endTs === 'number' &&
+    !Number.isNaN(startTs) &&
+    !Number.isNaN(endTs) &&
+    startTs <= endTs;
+
+  if (hasValidRange) {
+    const interval = getTimeInterval(dataExportDefaultTime, true);
+    let cursor =
+      dataExportDefaultTime === 'hour'
+        ? Math.floor(startTs / 3600) * 3600
+        : toStartOfDaySec(startTs);
+    const generatedTs = [];
+    let guard = 0;
+    while (cursor <= endTs && guard < MAX_CHART_AXIS_BUCKETS) {
+      generatedTs.push(cursor);
+      cursor += interval;
+      guard += 1;
+    }
+    const showYear = isDataCrossYear([
+      ...data.map((item) => item.created_at),
+      ...generatedTs,
+      startTs,
+      endTs,
+    ]);
+    const generatedLabels = generatedTs.map((ts) =>
+      timestamp2string1(ts, dataExportDefaultTime, showYear),
+    );
+    if (generatedLabels.length === 0) {
+      return fromData.sort((x, y) => x.localeCompare(y));
+    }
+    return mergeAndSort(generatedLabels, fromData);
+  }
+
+  let chartTimePoints = fromData;
+
+  if (chartTimePoints.length < DEFAULTS.MAX_TREND_POINTS && data.length > 0) {
     const lastTime = Math.max(...data.map((item) => item.created_at));
     const interval = getTimeInterval(dataExportDefaultTime, true);
 
     // 生成时间点数组，用于检查是否跨年
     const generatedTimestamps = Array.from(
       { length: DEFAULTS.MAX_TREND_POINTS },
-      (_, i) => lastTime - (6 - i) * interval,
+      (_, i) => lastTime - (DEFAULTS.MAX_TREND_POINTS - 1 - i) * interval,
     );
     const showYear = isDataCrossYear(generatedTimestamps);
 

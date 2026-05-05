@@ -80,6 +80,21 @@ export function getRollingDateRange(
 }
 
 /**
+ * Inclusive calendar-day range: start at 00:00:00, end at 23:59:59.999 local time.
+ * `numDays === 1` → today only; `numDays === 7` → today and the previous 6 calendar days.
+ */
+export function getCalendarDayRangeInclusive(
+  numDays: number,
+  fromDate: Date = new Date()
+): { start: Date; end: Date } {
+  const end = getEndOfDay(fromDate)
+  const startBase = new Date(fromDate)
+  startBase.setDate(startBase.getDate() - (numDays - 1))
+  const start = getStartOfDay(startBase)
+  return { start, end }
+}
+
+/**
  * Compute time range as Unix timestamps (seconds)
  * @param days Default number of days if no dates provided
  * @param startDate Optional start date

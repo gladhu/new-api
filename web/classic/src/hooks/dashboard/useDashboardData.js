@@ -20,8 +20,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { API, isAdmin, showError, timestamp2string } from '../../helpers';
-import { getDefaultTime, getInitialTimestamp } from '../../helpers/dashboard';
+import { API, isAdmin, showError } from '../../helpers';
+import {
+  getDefaultTime,
+  getInitialDashboardRangeStrings,
+  normalizeDashboardTimestampStrings,
+} from '../../helpers/dashboard';
 import { TIME_OPTIONS } from '../../constants/dashboard.constants';
 import { useIsMobile } from '../common/useIsMobile';
 import { useMinimumLoadingTime } from '../common/useMinimumLoadingTime';
@@ -39,14 +43,17 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const showLoading = useMinimumLoadingTime(loading);
 
   // ========== 输入状态 ==========
-  const [inputs, setInputs] = useState({
-    username: '',
-    token_name: '',
-    model_name: '',
-    start_timestamp: getInitialTimestamp(),
-    end_timestamp: timestamp2string(new Date().getTime() / 1000 + 3600),
-    channel: '',
-    data_export_default_time: '',
+  const [inputs, setInputs] = useState(() => {
+    const range = getInitialDashboardRangeStrings();
+    return {
+      username: '',
+      token_name: '',
+      model_name: '',
+      start_timestamp: range.start_timestamp,
+      end_timestamp: range.end_timestamp,
+      channel: '',
+      data_export_default_time: '',
+    };
   });
 
   const [dataExportDefaultTime, setDataExportDefaultTime] =
@@ -160,7 +167,18 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     setLoading(true);
     try {
       let url = '';
-      const { start_timestamp, end_timestamp, username } = inputs;
+      const rangeNorm = normalizeDashboardTimestampStrings(
+        inputs.start_timestamp,
+        inputs.end_timestamp,
+      );
+      const merged = { ...inputs, ...rangeNorm };
+      if (
+        rangeNorm.start_timestamp !== inputs.start_timestamp ||
+        rangeNorm.end_timestamp !== inputs.end_timestamp
+      ) {
+        setInputs((prev) => ({ ...prev, ...rangeNorm }));
+      }
+      const { start_timestamp, end_timestamp, username } = merged;
       let localStartTimestamp = Date.parse(start_timestamp) / 1000;
       let localEndTimestamp = Date.parse(end_timestamp) / 1000;
 
@@ -216,7 +234,11 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const loadUserQuotaData = useCallback(async () => {
     if (!isAdminUser) return [];
     try {
-      const { start_timestamp, end_timestamp } = inputs;
+      const rangeNorm = normalizeDashboardTimestampStrings(
+        inputs.start_timestamp,
+        inputs.end_timestamp,
+      );
+      const { start_timestamp, end_timestamp } = { ...inputs, ...rangeNorm };
       const localStartTimestamp = Date.parse(start_timestamp) / 1000;
       const localEndTimestamp = Date.parse(end_timestamp) / 1000;
       const url = `/api/data/users?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
@@ -253,12 +275,16 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const handleSearchConfirm = useCallback(
     async (updateChartDataCallback) => {
       const data = await refresh();
+      const chartTimeRangeSec = {
+        start_timestamp: Date.parse(inputs.start_timestamp) / 1000,
+        end_timestamp: Date.parse(inputs.end_timestamp) / 1000,
+      };
       if (data && data.length > 0 && updateChartDataCallback) {
-        updateChartDataCallback(data);
+        updateChartDataCallback(data, chartTimeRangeSec);
       }
       setSearchModalVisible(false);
     },
-    [refresh],
+    [refresh, inputs.start_timestamp, inputs.end_timestamp],
   );
 
   // ========== Effects ==========
