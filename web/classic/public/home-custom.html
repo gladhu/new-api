@@ -703,19 +703,79 @@
     <script>
       ;(function () {
         var root = document.documentElement
+
         function applyTheme(t) {
           if (t !== 'light' && t !== 'dark') return
           root.classList.remove('light', 'dark')
           root.classList.add(t)
         }
+
+        /** 同源嵌入时从控制台页面读取主题（与 new-api 默认 / Classic 顶栏一致），无需父页 postMessage */
+        function readParentTheme() {
+          if (window.self === window.top) return null
+          try {
+            var doc = window.parent.document
+            var pel = doc.documentElement
+            if (pel.classList.contains('dark')) return 'dark'
+            if (pel.classList.contains('light')) return 'light'
+            var b = doc.body
+            if (b) {
+              var tm = b.getAttribute('theme-mode')
+              if (tm === 'dark' || tm === 'light') return tm
+            }
+          } catch (err) {
+            /* 跨域或非同源部署则忽略 */
+          }
+          return null
+        }
+
+        function syncThemeFromParent() {
+          var t = readParentTheme()
+          if (t) applyTheme(t)
+          return !!t
+        }
+
         if (window.self !== window.top) {
           root.classList.add('embedded')
         }
-        applyTheme(
-          window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light'
-        )
+
+        if (!syncThemeFromParent()) {
+          applyTheme(
+            window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+          )
+        }
+
+        if (window.self !== window.top) {
+          try {
+            var pel = window.parent.document.documentElement
+            var mo = new MutationObserver(function () {
+              syncThemeFromParent()
+            })
+            mo.observe(pel, { attributes: true, attributeFilter: ['class'] })
+          } catch (e1) {
+            /* ignore */
+          }
+          try {
+            var body = window.parent.document.body
+            if (body) {
+              var mo2 = new MutationObserver(function () {
+                syncThemeFromParent()
+              })
+              mo2.observe(body, {
+                attributes: true,
+                attributeFilter: ['theme-mode'],
+              })
+            }
+          } catch (e2) {
+            /* ignore */
+          }
+          requestAnimationFrame(syncThemeFromParent)
+          setTimeout(syncThemeFromParent, 50)
+          setTimeout(syncThemeFromParent, 300)
+        }
+
         window.addEventListener('message', function (e) {
           var d = e.data
           if (!d || typeof d !== 'object') return
