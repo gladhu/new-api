@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="统一接入多家大模型与上游渠道，OpenAI 兼容 API，自托管 AI 网关。"
+    />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <title>首页 · New API</title>
+    <style>
+      :root {
+        --bg: #07070c;
+        --bg2: #0f0f18;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #f4f4f8;
+        --muted: rgba(244, 244, 248, 0.62);
+        --accent: #8b5cf6;
+        --accent2: #38bdf8;
+        --card: rgba(255, 255, 255, 0.04);
+        --radius: 14px;
+        --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+          'PingFang SC', 'Microsoft YaHei', sans-serif;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        min-height: 100vh;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 1.25rem;
+      }
+
+      /* Header */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        backdrop-filter: blur(12px);
+        background: rgba(7, 7, 12, 0.72);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 64px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .brand img {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .nav-links a:not(.btn) {
+        padding: 0.45rem 0.85rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .nav-links a:not(.btn):hover {
+        color: var(--text);
+        background: var(--card);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.55rem 1.1rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease,
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+
+      .btn:active {
+        transform: scale(0.98);
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, var(--accent), #6366f1);
+        color: #fff;
+        box-shadow: 0 8px 28px rgba(139, 92, 246, 0.35);
+      }
+
+      .btn-primary:hover {
+        box-shadow: 0 10px 36px rgba(139, 92, 246, 0.45);
+      }
+
+      .btn-ghost {
+        border-color: var(--border);
+        background: transparent;
+        color: var(--text);
+      }
+
+      .btn-ghost:hover {
+        background: var(--card);
+        border-color: rgba(255, 255, 255, 0.14);
+      }
+
+      /* Hero */
+      .hero {
+        position: relative;
+        padding: 4.5rem 0 3rem;
+        overflow: hidden;
+      }
+
+      .hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(
+            ellipse 55% 45% at 18% 12%,
+            rgba(139, 92, 246, 0.35),
+            transparent 65%
+          ),
+          radial-gradient(
+            ellipse 45% 40% at 82% 8%,
+            rgba(56, 189, 248, 0.22),
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse 40% 35% at 45% 88%,
+            rgba(99, 102, 241, 0.18),
+            transparent 65%
+          );
+        opacity: 0.85;
+      }
+
+      .hero-inner {
+        position: relative;
+        text-align: center;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.85rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        background: var(--card);
+        margin-bottom: 1.25rem;
+      }
+
+      .pill-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent2), var(--accent));
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5.5vw, 3.25rem);
+        line-height: 1.12;
+        letter-spacing: -0.03em;
+        font-weight: 800;
+      }
+
+      .gradient-text {
+        background: linear-gradient(
+          110deg,
+          #c4b5fd,
+          #a78bfa 30%,
+          #38bdf8 70%,
+          #22d3ee
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .hero-lead {
+        margin: 1.35rem auto 0;
+        max-width: 34rem;
+        font-size: 1.05rem;
+        color: var(--muted);
+      }
+
+      .hero-actions {
+        margin-top: 2rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: center;
+      }
+
+      .hero-note {
+        margin-top: 1rem;
+        font-size: 0.82rem;
+        color: rgba(244, 244, 248, 0.42);
+      }
+
+      /* Provider strip */
+      .strip {
+        margin-top: 3.5rem;
+        padding: 1.25rem 0;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.02),
+          transparent
+        );
+      }
+
+      .strip-label {
+        text-align: center;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: rgba(244, 244, 248, 0.38);
+        margin-bottom: 1rem;
+      }
+
+      .strip-logos {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem 0.65rem;
+      }
+
+      .strip-logos span {
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      /* Sections */
+      section.block {
+        padding: 4rem 0;
+      }
+
+      section.block.alt {
+        background: var(--bg2);
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .section-head {
+        text-align: center;
+        max-width: 36rem;
+        margin: 0 auto 2.5rem;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        letter-spacing: -0.02em;
+      }
+
+      .section-head p {
+        margin: 0.75rem 0 0;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      }
+
+      .card {
+        padding: 1.35rem 1.25rem;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: var(--card);
+        transition:
+          border-color 0.2s ease,
+          transform 0.2s ease;
+      }
+
+      .card:hover {
+        border-color: rgba(139, 92, 246, 0.35);
+        transform: translateY(-2px);
+      }
+
+      .card h3 {
+        margin: 0 0 0.45rem;
+        font-size: 1.05rem;
+      }
+
+      .card p {
+        margin: 0;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+
+      .card-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.85rem;
+        font-size: 1.15rem;
+        background: linear-gradient(
+          135deg,
+          rgba(139, 92, 246, 0.25),
+          rgba(56, 189, 248, 0.15)
+        );
+        border: 1px solid var(--border);
+      }
+
+      /* CTA */
+      .cta {
+        text-align: center;
+        padding: 3.5rem 1.5rem;
+        border-radius: calc(var(--radius) + 6px);
+        border: 1px solid var(--border);
+        background: linear-gradient(
+          145deg,
+          rgba(139, 92, 246, 0.12),
+          rgba(15, 15, 24, 0.9)
+        );
+      }
+
+      .cta h2 {
+        margin: 0;
+        font-size: 1.65rem;
+      }
+
+      .cta p {
+        margin: 0.65rem auto 0;
+        max-width: 28rem;
+        color: var(--muted);
+      }
+
+      .cta .hero-actions {
+        margin-top: 1.75rem;
+      }
+
+      @media (max-width: 640px) {
+        .nav-links a:not(.btn) {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap nav">
+        <a class="brand" href="/" target="_top">
+          <img src="/logo.png" alt="" width="32" height="32" />
+          <span>New API</span>
+        </a>
+        <nav class="nav-links" aria-label="主导航">
+          <a href="/pricing" target="_top">定价</a>
+          <a href="/about" target="_top">关于</a>
+          <a class="btn btn-ghost" href="/login" target="_top">登录</a>
+          <a class="btn btn-primary" href="/register" target="_top">立即注册</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-inner">
+          <div class="pill">
+            <span class="pill-dot" aria-hidden="true"></span>
+            OpenAI 兼容 · 自托管 · 多渠道聚合
+          </div>
+          <h1>
+            一站式 AI 接口聚合<br />
+            <span class="gradient-text">让调用大模型像调用 HTTP 一样简单</span>
+          </h1>
+          <p class="hero-lead">
+            提供快速、便捷的 大模型 API 接口调用方案，打造稳定且易于使用的 API
+            接口平台，一站式集成几乎所有AI大模型。
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/register" target="_top">
+              免费开通
+            </a>
+            <a class="btn btn-ghost" href="/pricing" target="_top">查看定价</a>
+          </div>
+          <p class="hero-note">已经接入100+ 大模型</p>
+        </div>
+
+        <div class="strip">
+          <div class="wrap">
+            <p class="strip-label">兼容生态与常见上游</p>
+            <div class="strip-logos" aria-label="模型与平台">
+              <span>OpenAI</span>
+              <span>Anthropic Claude</span>
+              <span>Google Gemini</span>
+              <span>Azure OpenAI</span>
+              <span>AWS Bedrock</span>
+              <span>DeepSeek</span>
+              <span>通义·豆包·混元</span>
+              <span>Dify · Open WebUI · Lobe Chat</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="feat-title">
+        <div class="wrap">
+          <div class="section-head">
+            <h2 id="feat-title">我们的优势</h2>
+            <p>适配多种业务场景，驱动业务增长。</p>
+          </div>
+          <div class="grid">
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">⚡</div>
+              <h3>统一兼容路由</h3>
+              <p>
+                一套 OpenAI 风格 API，对接多种上游渠道与模型别名，降低客户端改造成本。
+              </p>
+            </article>
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">🔐</div>
+              <h3>密钥与权限</h3>
+              <p>用户、分组与令牌管理，配合速率限制与路由策略，便于多团队协作。</p>
+            </article>
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">📊</div>
+              <h3>用量与计费</h3>
+              <p>日志、配额与计费表达式，支持按模型与业务维度做精细化结算。</p>
+            </article>
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">🧭</div>
+              <h3>可观测性</h3>
+              <p>请求追踪与失败重试策略更清晰，便于排查上游抖动与限额问题。</p>
+            </article>
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">🛡️</div>
+              <h3>服务保障</h3>
+              <p>
+                稳定的网关能力与清晰的故障处理流程，配合监控与告警，降低业务中断风险。
+              </p>
+            </article>
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">📋</div>
+              <h3>透明计费</h3>
+              <p>
+                计价规则与用量明细可追溯，结算逻辑可核对，避免「看不清、对不上」的账单困扰。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block alt">
+        <div class="wrap">
+          <div class="cta">
+            <h2>几分钟完成接入</h2>
+            <p>
+              注册账号 → 配置上游渠道与模型 → 创建 API 密钥，即可在现有应用中替换基地址开始调用。
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="/register" target="_top">
+                开始使用
+              </a>
+              <a class="btn btn-ghost" href="/login" target="_top">
+                已有账号登录
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
