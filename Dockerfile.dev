@@ -1,9 +1,12 @@
 # Backend-only build for frontend development
 # Skips frontend build, uses a placeholder for //go:embed web/dist
+#
+# Reserve RESERVE_CPU_CORES CPUs for the host during compile (default 1).
 
 FROM golang:1.26.1-alpine AS builder
 
 ENV GO111MODULE=on CGO_ENABLED=0
+ARG RESERVE_CPU_CORES=1
 ARG TARGETOS
 ARG TARGETARCH
 ENV GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}
@@ -20,7 +23,11 @@ RUN mkdir -p web/default/dist web/classic/dist && \
     echo '<!doctype html><html><head><title>dev</title></head><body>use frontend dev server</body></html>' > web/default/dist/index.html && \
     echo '<!doctype html><html><head><title>dev</title></head><body>use frontend dev server</body></html>' > web/classic/dist/index.html
 
-RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
+RUN RESERVE="${RESERVE_CPU_CORES:-1}"; \
+    TOTAL=$(nproc); \
+    if [ "$TOTAL" -gt "$RESERVE" ]; then USE=$((TOTAL - RESERVE)); else USE=1; fi; \
+    export GOMAXPROCS="$USE"; \
+    go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
 
 FROM debian:bookworm-slim
 
