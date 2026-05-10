@@ -26,6 +26,7 @@ import {
   ScrollItem,
 } from '@douyinfe/semi-ui';
 import { API, showError, copy, showSuccess } from '../../helpers';
+import { resolveDocsNavLink } from '../../helpers/docsNavLink';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { API_ENDPOINTS } from '../../constants/common.constant';
 import { StatusContext } from '../../context/Status';
@@ -38,7 +39,7 @@ import {
   IconFile,
   IconCopy,
 } from '@douyinfe/semi-icons';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import {
   Moonshot,
@@ -67,6 +68,7 @@ const { Text } = Typography;
 
 const Home = () => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const [statusState] = useContext(StatusContext);
   const actualTheme = useActualTheme();
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
@@ -244,7 +246,17 @@ const Home = () => {
                         size={isMobile ? 'default' : 'large'}
                         className='flex items-center !rounded-3xl px-6 py-2'
                         icon={<IconFile />}
-                        onClick={() => window.open(docsLink, '_blank')}
+                        onClick={() => {
+                          const { href, external } = resolveDocsNavLink(
+                            docsLink,
+                            statusState?.status?.server_address,
+                          );
+                          if (external) {
+                            window.open(href, '_blank');
+                          } else {
+                            navigate(href);
+                          }
+                        }}
                       >
                         {t('文档')}
                       </Button>

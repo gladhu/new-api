@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { resolveDocsNavLink } from '@/lib/docs-nav-link'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStatus } from '@/hooks/use-status'
 
@@ -52,6 +53,7 @@ export function useTopNavLinks(): TopNavLink[] {
 
   // Documentation link (may be external)
   const docsLink: string | undefined = status?.docs_link as string | undefined
+  const serverAddress = status?.server_address as string | undefined
 
   const isAuthed = !!auth?.user
 
@@ -74,10 +76,15 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Model Square'), href: '/pricing', disabled })
   }
 
-  // Docs (supports external links)
+  // Docs (supports external links; same-site URLs stay in-app)
   if (modules?.docs !== false) {
     if (docsLink) {
-      links.push({ title: t('Docs'), href: docsLink, external: true })
+      const resolved = resolveDocsNavLink(docsLink, serverAddress)
+      links.push({
+        title: t('Docs'),
+        href: resolved.href,
+        external: resolved.external,
+      })
     } else {
       links.push({ title: t('Docs'), href: '/docs' })
     }
