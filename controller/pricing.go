@@ -4,6 +4,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +34,28 @@ func filterPricingByUsableGroups(pricing []model.Pricing, usableGroup map[string
 	return filtered
 }
 
+// visitorPricingUsableGroups builds usable_group for unauthenticated visitors browsing the catalog.
+// Logged-in users still get group-filtered pricing; visitors see the full list but need group labels
+// for filters — prefer configured ratio groups, else derive from pricing enable_groups.
+func visitorPricingUsableGroups(pricing []model.Pricing) map[string]string {
+	out := make(map[string]string)
+	for g := range ratio_setting.GetGroupRatioCopy() {
+		out[g] = setting.GetUsableGroupDescription(g)
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for _, p := range pricing {
+		for _, g := range p.EnableGroup {
+			if g == "" || g == "all" {
+				continue
+			}
+			out[g] = setting.GetUsableGroupDescription(g)
+		}
+	}
+	return out
+}
+
 func GetPricing(c *gin.Context) {
 	pricing := model.GetPricing()
 	userId, exists := c.Get("id")
@@ -42,9 +65,11 @@ func GetPricing(c *gin.Context) {
 		groupRatio[s] = f
 	}
 	var group string
+	authenticated := false
 	if exists {
 		user, err := model.GetUserCache(userId.(int))
 		if err == nil {
+			authenticated = true
 			group = user.Group
 			for g := range groupRatio {
 				ratio, ok := ratio_setting.GetGroupGroupRatio(group, g)
@@ -56,7 +81,11 @@ func GetPricing(c *gin.Context) {
 	}
 
 	usableGroup = service.GetUserUsableGroups(group)
-	pricing = filterPricingByUsableGroups(pricing, usableGroup)
+	if authenticated {
+		pricing = filterPricingByUsableGroups(pricing, usableGroup)
+	} else {
+		usableGroup = visitorPricingUsableGroups(pricing)
+	}
 	// check groupRatio contains usableGroup
 	for group := range ratio_setting.GetGroupRatioCopy() {
 		if _, ok := usableGroup[group]; !ok {
