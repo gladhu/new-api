@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -22,6 +22,140 @@
         --radius: 14px;
         --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
           'PingFang SC', 'Microsoft YaHei', sans-serif;
+      }
+
+      html.dark {
+        color-scheme: dark;
+      }
+
+      html.light {
+        color-scheme: light;
+        --bg: #f8fafc;
+        --bg2: #f1f5f9;
+        --border: rgba(15, 23, 42, 0.1);
+        --text: #0f172a;
+        --muted: rgba(51, 65, 85, 0.82);
+        --accent: #6d28d9;
+        --accent2: #0369a1;
+        --card: #ffffff;
+      }
+
+      html.light .btn-ghost:hover {
+        border-color: rgba(15, 23, 42, 0.12);
+        background: rgba(15, 23, 42, 0.04);
+      }
+
+      html.light .enterprise-highlight {
+        background: #ffffff;
+        border: 1px solid rgba(124, 58, 237, 0.22);
+        box-shadow:
+          0 1px 2px rgba(15, 23, 42, 0.04),
+          0 8px 24px rgba(99, 102, 241, 0.08);
+      }
+
+      html.light .enterprise-highlight-main {
+        background: none;
+        -webkit-background-clip: unset;
+        background-clip: unset;
+        color: #4c1d95;
+        letter-spacing: 0.08em;
+      }
+
+      html.light .enterprise-highlight-sub {
+        color: #475569;
+        letter-spacing: 0.02em;
+      }
+
+      html.light .hero-note {
+        color: rgba(71, 85, 105, 0.85);
+      }
+
+      html.light .pill {
+        background: rgba(124, 58, 237, 0.06);
+        border-color: rgba(124, 58, 237, 0.18);
+        color: #475569;
+      }
+
+      html.light .strip {
+        background: linear-gradient(
+          180deg,
+          rgba(124, 58, 237, 0.04),
+          transparent
+        );
+      }
+
+      html.light .strip-label {
+        color: rgba(71, 85, 105, 0.72);
+      }
+
+      html.light .strip-logos span {
+        background: #ffffff;
+        border-color: rgba(15, 23, 42, 0.1);
+        color: #475569;
+      }
+
+      html.light .card {
+        background: #ffffff;
+        border-color: rgba(15, 23, 42, 0.1);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      }
+
+      html.light .card:hover {
+        border-color: rgba(124, 58, 237, 0.28);
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.08);
+      }
+
+      html.light .card-icon {
+        background: linear-gradient(
+          135deg,
+          rgba(124, 58, 237, 0.12),
+          rgba(14, 165, 233, 0.1)
+        );
+        border-color: rgba(15, 23, 42, 0.08);
+      }
+
+      html.light .gradient-text {
+        background: linear-gradient(
+          110deg,
+          #6d28d9,
+          #7c3aed 35%,
+          #0369a1 72%,
+          #0e7490
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      html.light .btn-primary {
+        box-shadow: 0 4px 14px rgba(109, 40, 217, 0.22);
+      }
+
+      html.light .btn-primary:hover {
+        box-shadow: 0 6px 20px rgba(109, 40, 217, 0.28);
+      }
+
+      html.light .cta {
+        background: linear-gradient(
+          165deg,
+          #faf5ff 0%,
+          #f5f3ff 38%,
+          #eef2ff 100%
+        );
+        border-color: rgba(124, 58, 237, 0.18);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      }
+
+      html.light .cta h2 {
+        color: var(--text);
+      }
+
+      html.light .cta p {
+        color: var(--muted);
+      }
+
+      html.light .hero-lead strong {
+        color: #6d28d9;
       }
 
       *,
@@ -60,8 +194,23 @@
         top: 0;
         z-index: 40;
         backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
         background: rgba(7, 7, 12, 0.72);
         border-bottom: 1px solid var(--border);
+      }
+
+      /* 嵌入控制台：不再渲染内层顶栏（外层已有菜单） */
+      html.embedded header {
+        display: none;
+      }
+
+      /* 嵌入时顶栏在外层：略增大 Hero 上内边距，避免首屏胶囊标语紧贴可视区顶部 */
+      html.embedded .hero {
+        padding-top: clamp(2.5rem, 6vw, 4rem);
+      }
+
+      html.light header {
+        background: var(--bg);
       }
 
       .nav {
@@ -146,34 +295,11 @@
         border-color: rgba(255, 255, 255, 0.14);
       }
 
-      /* Hero */
+      /* Hero（无背景光晕，避免与顶栏区域视觉干扰） */
       .hero {
         position: relative;
         padding: 4.5rem 0 3rem;
         overflow: hidden;
-      }
-
-      .hero::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: radial-gradient(
-            ellipse 55% 45% at 18% 12%,
-            rgba(139, 92, 246, 0.35),
-            transparent 65%
-          ),
-          radial-gradient(
-            ellipse 45% 40% at 82% 8%,
-            rgba(56, 189, 248, 0.22),
-            transparent 60%
-          ),
-          radial-gradient(
-            ellipse 40% 35% at 45% 88%,
-            rgba(99, 102, 241, 0.18),
-            transparent 65%
-          );
-        opacity: 0.85;
       }
 
       .hero-inner {
@@ -241,6 +367,57 @@
         margin-top: 1rem;
         font-size: 0.82rem;
         color: rgba(244, 244, 248, 0.42);
+      }
+
+      /* 企业级定位强调 */
+      .enterprise-highlight {
+        margin: 0 auto 1.35rem;
+        padding: 1.05rem 1.4rem;
+        max-width: 38rem;
+        text-align: center;
+        border-radius: 16px;
+        background: linear-gradient(
+          145deg,
+          rgba(139, 92, 246, 0.22),
+          rgba(56, 189, 248, 0.08)
+        );
+        border: 1px solid rgba(167, 139, 250, 0.45);
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+          0 12px 48px rgba(99, 102, 241, 0.18);
+      }
+
+      .enterprise-highlight-main {
+        display: block;
+        font-size: clamp(1.25rem, 3.8vw, 1.95rem);
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-indent: 0.12em;
+        background: linear-gradient(
+          105deg,
+          #faf5ff,
+          #ddd6fe 35%,
+          #a5b4fc 65%,
+          #7dd3fc
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .enterprise-highlight-sub {
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.94rem;
+        line-height: 1.55;
+        color: rgba(244, 244, 248, 0.72);
+        font-weight: 500;
+        letter-spacing: 0.04em;
+      }
+
+      .hero-lead strong {
+        color: #ddd6fe;
+        font-weight: 600;
       }
 
       /* Provider strip */
@@ -415,15 +592,21 @@
         <div class="wrap hero-inner">
           <div class="pill">
             <span class="pill-dot" aria-hidden="true"></span>
-            OpenAI 兼容 · 自托管 · 多渠道聚合
+            企业级 · OpenAI 兼容 · 多渠道聚合
           </div>
+          <p class="enterprise-highlight" role="doc-subtitle">
+            <span class="enterprise-highlight-main">企业级 AI 平台</span>
+            <span class="enterprise-highlight-sub"
+              >面向团队与规模化生产：统一接入、权限与配额、可观测与计费，一站满足严肃业务上线要求。</span>
+          </p>
           <h1>
             一站式 AI 接口聚合<br />
             <span class="gradient-text">让调用大模型像调用 HTTP 一样简单</span>
           </h1>
           <p class="hero-lead">
-            提供快速、便捷的 大模型 API 接口调用方案，打造稳定且易于使用的 API
-            接口平台，一站式集成几乎所有AI大模型。
+            <strong>企业级 AI 平台</strong>定位：提供快速、便捷的 大模型 API
+            调用方案，打造<strong>稳定可靠、易于治理</strong>
+            的接口平台，一站式集成几乎所有AI大模型，支撑业务持续增长。
           </p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/register" target="_top">
@@ -517,5 +700,32 @@
         </div>
       </section>
     </main>
+    <script>
+      ;(function () {
+        var root = document.documentElement
+        function applyTheme(t) {
+          if (t !== 'light' && t !== 'dark') return
+          root.classList.remove('light', 'dark')
+          root.classList.add(t)
+        }
+        if (window.self !== window.top) {
+          root.classList.add('embedded')
+        }
+        applyTheme(
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+        )
+        window.addEventListener('message', function (e) {
+          var d = e.data
+          if (!d || typeof d !== 'object') return
+          var t = d.themeMode
+          if (t !== 'light' && t !== 'dark' && d.type === 'new-api-theme') {
+            t = d.theme
+          }
+          if (t === 'light' || t === 'dark') applyTheme(t)
+        })
+      })()
+    </script>
   </body>
 </html>
