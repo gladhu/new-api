@@ -21,6 +21,7 @@ import {
   STORAGE_KEYS,
   DEFAULT_CONFIG,
 } from '../../constants/playground.constants';
+import { normalizeSamplingParameters } from '../../helpers/playgroundParameter';
 
 const MESSAGES_STORAGE_KEY = 'playground_messages';
 
@@ -75,10 +76,10 @@ export const loadConfig = () => {
             ? parsedConfig?.inputs?.max_tokens
             : parsedMaxTokens,
         },
-        parameterEnabled: {
+        parameterEnabled: normalizeSamplingParameters({
           ...DEFAULT_CONFIG.parameterEnabled,
           ...parsedConfig.parameterEnabled,
-        },
+        }),
         showDebugPanel:
           parsedConfig.showDebugPanel || DEFAULT_CONFIG.showDebugPanel,
         customRequestMode:

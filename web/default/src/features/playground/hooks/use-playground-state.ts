@@ -7,6 +7,8 @@ import {
   saveParameterEnabled,
   loadMessages,
   saveMessages,
+  applyParameterEnabledUpdate,
+  normalizeSamplingParameters,
 } from '../lib'
 import type {
   Message,
@@ -29,7 +31,10 @@ export function usePlaygroundState() {
   const [parameterEnabled, setParameterEnabled] = useState<ParameterEnabled>(
     () => {
       const saved = loadParameterEnabled()
-      return { ...DEFAULT_PARAMETER_ENABLED, ...saved }
+      return normalizeSamplingParameters({
+        ...DEFAULT_PARAMETER_ENABLED,
+        ...saved,
+      })
     }
   )
 
@@ -56,7 +61,7 @@ export function usePlaygroundState() {
   const updateParameterEnabled = useCallback(
     (key: keyof ParameterEnabled, value: boolean) => {
       setParameterEnabled((prev) => {
-        const updated = { ...prev, [key]: value }
+        const updated = applyParameterEnabledUpdate(prev, key, value)
         saveParameterEnabled(updated)
         return updated
       })

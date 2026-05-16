@@ -97,7 +97,7 @@ export const DEFAULT_CONFIG = {
   },
   parameterEnabled: {
     temperature: false,
-    top_p: true,
+    top_p: false,
     max_tokens: false,
     frequency_penalty: true,
     presence_penalty: true,

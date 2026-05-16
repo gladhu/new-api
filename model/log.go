@@ -470,8 +470,10 @@ func GetLogsForExport(f LogListFilter, maxRows int) (logs []*Log, total int64, e
 		common.SysError("failed to query logs for export: " + err.Error())
 		return nil, total, errors.New("查询日志失败")
 	}
-	if err = fillLogChannelNames(logs); err != nil {
-		return nil, total, err
+	if f.ForAdmin {
+		if err = fillLogChannelNames(logs); err != nil {
+			return nil, total, err
+		}
 	}
 	return logs, total, nil
 }

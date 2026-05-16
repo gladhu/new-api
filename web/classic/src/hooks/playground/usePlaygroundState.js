@@ -33,6 +33,10 @@ import {
   saveMessages,
 } from '../../components/playground/configStorage';
 import { processIncompleteThinkTags } from '../../helpers';
+import {
+  normalizeSamplingParameters,
+  toggleSamplingParameter,
+} from '../../helpers/playgroundParameter';
 
 export const usePlaygroundState = () => {
   const { t } = useTranslation();
@@ -66,8 +70,10 @@ export const usePlaygroundState = () => {
   const [inputs, setInputs] = useState(
     savedConfig.inputs || DEFAULT_CONFIG.inputs,
   );
-  const [parameterEnabled, setParameterEnabled] = useState(
-    savedConfig.parameterEnabled || DEFAULT_CONFIG.parameterEnabled,
+  const [parameterEnabled, setParameterEnabled] = useState(() =>
+    normalizeSamplingParameters(
+      savedConfig.parameterEnabled || DEFAULT_CONFIG.parameterEnabled,
+    ),
   );
   const [showDebugPanel, setShowDebugPanel] = useState(
     savedConfig.showDebugPanel || DEFAULT_CONFIG.showDebugPanel,
@@ -125,10 +131,7 @@ export const usePlaygroundState = () => {
   }, []);
 
   const handleParameterToggle = useCallback((paramName) => {
-    setParameterEnabled((prev) => ({
-      ...prev,
-      [paramName]: !prev[paramName],
-    }));
+    setParameterEnabled((prev) => toggleSamplingParameter(prev, paramName));
   }, []);
 
   // 消息保存函数 - 改为立即保存，可以接受参数
@@ -177,10 +180,12 @@ export const usePlaygroundState = () => {
       }));
     }
     if (importedConfig.parameterEnabled) {
-      setParameterEnabled((prev) => ({
-        ...prev,
-        ...importedConfig.parameterEnabled,
-      }));
+      setParameterEnabled((prev) =>
+        normalizeSamplingParameters({
+          ...prev,
+          ...importedConfig.parameterEnabled,
+        }),
+      );
     }
     if (typeof importedConfig.showDebugPanel === 'boolean') {
       setShowDebugPanel(importedConfig.showDebugPanel);

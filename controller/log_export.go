@@ -43,10 +43,11 @@ func parseLogExportLocation(c *gin.Context) *time.Location {
 	return loc
 }
 
-func writeUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
+// Admin export: all operational fields (matches admin usage-log table + diagnostics).
+func writeAdminUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
 	header := []string{
 		"日志ID", "时间", "日志类型", "用户ID", "用户名", "模型名称", "令牌名称",
-		"输入Token数", "输出Token数", "额度", "金额(USD)", "当前展示金额",
+		"输入Token数", "输出Token数", "额度", "金额(USD)", "花费",
 		"耗时(秒)", "是否流式", "渠道ID", "渠道名称", "分组", "IP", "请求ID", "日志内容", "其他信息",
 	}
 	_ = w.Write(header)
@@ -80,6 +81,42 @@ func writeUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Locatio
 	w.Flush()
 }
 
+// User export: only fields visible on the non-admin usage-log page (both themes).
+// Excludes channel, user identity, log id, raw other JSON, USD-only column, admin diagnostics.
+func writeUserUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
+	header := []string{
+		"时间", "日志类型", "令牌名称", "分组", "模型名称",
+		"输入Token数", "输出Token数", "额度", "花费",
+		"耗时(秒)", "是否流式", "IP", "请求ID", "日志内容",
+	}
+	_ = w.Write(header)
+	for _, lg := range logs {
+		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
+		quota := int64(lg.Quota)
+		ip := ""
+		if (lg.Type == model.LogTypeConsume || lg.Type == model.LogTypeError) && lg.Ip != "" {
+			ip = lg.Ip
+		}
+		_ = w.Write([]string{
+			ts,
+			adminUserExportLogTypeName(lg.Type),
+			lg.TokenName,
+			lg.Group,
+			lg.ModelName,
+			strconv.Itoa(lg.PromptTokens),
+			strconv.Itoa(lg.CompletionTokens),
+			strconv.Itoa(lg.Quota),
+			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),
+			strconv.Itoa(lg.UseTime),
+			adminUserExportBoolText(lg.IsStream),
+			ip,
+			lg.RequestId,
+			lg.Content,
+		})
+	}
+	w.Flush()
+}
+
 func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	logs, _, err := model.GetLogsForExport(filter, 0)
 	if err != nil {
@@ -103,7 +140,11 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 		return
 	}
 	w := csv.NewWriter(c.Writer)
-	writeUsageLogsExportCSV(w, logs, loc)
+	if filter.ForAdmin {
+		writeAdminUsageLogsExportCSV(w, logs, loc)
+	} else {
+		writeUserUsageLogsExportCSV(w, logs, loc)
+	}
 }
 
 // ExportAllLogs exports filtered usage logs as CSV (admin).
