@@ -1375,6 +1375,8 @@
     "Expires": "过期",
     "Export consumption details": "导出消费明细",
     "Export failed": "导出失败",
+    "Export logs": "导出日志",
+    "Export completed": "导出成功",
     "Export monthly bill": "导出月账单",
     "Export monthly bill and consumption details": "导出月账单和消费明细",
     "Export usage CSV": "导出用量 CSV",

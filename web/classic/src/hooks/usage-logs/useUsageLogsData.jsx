@@ -42,6 +42,7 @@ import {
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
+import { downloadUsageLogsExport } from '../../helpers/usageLogsExport';
 
 export const useLogsData = () => {
   const { t } = useTranslation();
@@ -74,6 +75,7 @@ export const useLogsData = () => {
   const [logCount, setLogCount] = useState(0);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [logType, setLogType] = useState(0);
+  const [exportingLogs, setExportingLogs] = useState(false);
 
   // User and admin
   const isAdminUser = isAdmin();
@@ -307,6 +309,32 @@ export const useLogsData = () => {
       setStat(data);
     } else {
       showError(message);
+    }
+  };
+
+  const exportLogs = async () => {
+    if (exportingLogs) return;
+    const formValues = getFormValues();
+    const currentLogType =
+      formValues.logType !== undefined ? formValues.logType : logType;
+    setExportingLogs(true);
+    try {
+      await downloadUsageLogsExport(isAdminUser, {
+        logType: currentLogType,
+        username: formValues.username,
+        token_name: formValues.token_name,
+        model_name: formValues.model_name,
+        start_timestamp: Math.floor(Date.parse(formValues.start_timestamp) / 1000),
+        end_timestamp: Math.floor(Date.parse(formValues.end_timestamp) / 1000),
+        channel: formValues.channel,
+        group: formValues.group,
+        request_id: formValues.request_id,
+      });
+      showSuccess(t('导出成功'));
+    } catch (error) {
+      showError(error?.message || t('导出失败'));
+    } finally {
+      setExportingLogs(false);
     }
   };
 
@@ -887,6 +915,8 @@ export const useLogsData = () => {
     handlePageChange,
     handlePageSizeChange,
     refresh,
+    exportLogs,
+    exportingLogs,
     copyText,
     handleEyeClick,
     setLogsFormat,

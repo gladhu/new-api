@@ -1375,6 +1375,8 @@
     "Expires": "Expires",
     "Export consumption details": "Export consumption details",
     "Export failed": "Export failed",
+    "Export logs": "Export logs",
+    "Export completed": "Export completed",
     "Export monthly bill": "Export monthly bill",
     "Export monthly bill and consumption details": "Export monthly bill and consumption details",
     "Export usage CSV": "Export usage CSV",

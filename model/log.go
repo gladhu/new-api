@@ -387,6 +387,95 @@ func fillLogChannelNames(logs []*Log) error {
 
 const adminUserLogExportMaxRows = 100000
 
+// LogListFilter describes list/export query filters for usage logs.
+type LogListFilter struct {
+	UserId         int
+	LogType        int
+	StartTimestamp int64
+	EndTimestamp   int64
+	ModelName      string
+	Username       string
+	TokenName      string
+	ChannelId      int
+	Group          string
+	RequestId      string
+	ForAdmin       bool
+}
+
+func applyLogListFilters(tx *gorm.DB, f LogListFilter) (*gorm.DB, error) {
+	if f.UserId > 0 {
+		if f.LogType == LogTypeUnknown {
+			tx = tx.Where("logs.user_id = ?", f.UserId)
+		} else {
+			tx = tx.Where("logs.user_id = ? AND logs.type = ?", f.UserId, f.LogType)
+		}
+	} else if f.LogType != LogTypeUnknown {
+		tx = tx.Where("logs.type = ?", f.LogType)
+	}
+
+	if f.ModelName != "" {
+		if f.ForAdmin {
+			tx = tx.Where("logs.model_name LIKE ?", f.ModelName)
+		} else {
+			modelNamePattern, err := sanitizeLikePattern(f.ModelName)
+			if err != nil {
+				return nil, err
+			}
+			tx = tx.Where("logs.model_name LIKE ? ESCAPE '!'", modelNamePattern)
+		}
+	}
+	if f.Username != "" {
+		tx = tx.Where("logs.username = ?", f.Username)
+	}
+	if f.TokenName != "" {
+		tx = tx.Where("logs.token_name = ?", f.TokenName)
+	}
+	if f.RequestId != "" {
+		tx = tx.Where("logs.request_id = ?", f.RequestId)
+	}
+	if f.StartTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", f.StartTimestamp)
+	}
+	if f.EndTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", f.EndTimestamp)
+	}
+	if f.ChannelId != 0 {
+		tx = tx.Where("logs.channel_id = ?", f.ChannelId)
+	}
+	if f.Group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", f.Group)
+	}
+	return tx, nil
+}
+
+// GetLogsForExport returns logs matching filters up to maxRows (ordered by id desc).
+func GetLogsForExport(f LogListFilter, maxRows int) (logs []*Log, total int64, err error) {
+	if maxRows <= 0 {
+		maxRows = adminUserLogExportMaxRows
+	}
+	tx := LOG_DB.Model(&Log{})
+	tx, err = applyLogListFilters(tx, f)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err = tx.Count(&total).Error; err != nil {
+		common.SysError("failed to count logs for export: " + err.Error())
+		return nil, 0, errors.New("查询日志失败")
+	}
+	if total > int64(maxRows) {
+		return nil, total, fmt.Errorf("记录数超过导出上限 %d 条，请缩小筛选范围", maxRows)
+	}
+	err = tx.Order("logs.id desc").Limit(maxRows).Find(&logs).Error
+	if err != nil {
+		common.SysError("failed to query logs for export: " + err.Error())
+		return nil, total, errors.New("查询日志失败")
+	}
+	if err = fillLogChannelNames(logs); err != nil {
+		return nil, total, err
+	}
+	return logs, total, nil
+}
+
 // AdminUserMonthRangeSeconds returns inclusive unix seconds for the calendar month in loc.
 func AdminUserMonthRangeSeconds(year, month int, loc *time.Location) (startSec, endSec int64, err error) {
 	if loc == nil {

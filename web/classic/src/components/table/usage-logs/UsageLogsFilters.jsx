@@ -27,6 +27,8 @@ const LogsFilters = ({
   formInitValues,
   setFormApi,
   refresh,
+  exportLogs,
+  exportingLogs,
   setShowColumnSelector,
   formApi,
   setLogType,
@@ -182,6 +184,15 @@ const LogsFilters = ({
               size='small'
             >
               {t('列设置')}
+            </Button>
+            <Button
+              type='tertiary'
+              loading={exportingLogs}
+              disabled={exportingLogs || loading}
+              onClick={() => exportLogs()}
+              size='small'
+            >
+              {t('导出日志')}
             </Button>
           </div>
         </div>

@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
-import { ChevronDown, Eye, EyeOff, Loader2, RotateCcw, Search } from 'lucide-react'
+import {
+  ChevronDown,
+  Download,
+  Eye,
+  EyeOff,
+  Loader2,
+  RotateCcw,
+  Search,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
@@ -15,8 +24,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { LOG_TYPES } from '../constants'
+import { downloadUsageLogsExport } from '../api'
 import { buildSearchParams } from '../lib/filter'
-import { getDefaultTimeRange } from '../lib/utils'
+import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import { useUsageLogsContext } from './usage-logs-provider'
@@ -53,6 +63,7 @@ export function CommonLogsFilterBar({
     return { startTime: start, endTime: end }
   })
   const [logType, setLogType] = useState<LogTypeValue | ''>('')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     const next: Partial<CommonLogFilters> = {}
@@ -133,6 +144,32 @@ export function CommonLogsFilterBar({
     },
     [handleApply]
   )
+
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    try {
+      const filterParams = buildSearchParams(filters, 'common')
+      const apiParams = buildApiParams({
+        page: 1,
+        pageSize: 1,
+        searchParams: {
+          ...filterParams,
+          ...(logType ? { type: [logType] } : {}),
+        },
+        columnFilters: [],
+        isAdmin,
+      })
+      const { p: _p, page_size: _ps, ...exportParams } = apiParams
+      await downloadUsageLogsExport(exportParams, isAdmin)
+      toast.success(t('Export completed'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Export failed')
+      )
+    } finally {
+      setExporting(false)
+    }
+  }, [filters, isAdmin, logType, t])
 
   const hasExpandedFilters =
     !!filters.token ||
@@ -281,6 +318,20 @@ export function CommonLogsFilterBar({
           >
             <RotateCcw className='size-3.5' />
             {t('Reset')}
+          </Button>
+          <Button
+            variant='outline'
+            size='sm'
+            className='h-8'
+            onClick={handleExport}
+            disabled={exporting || fetchingLogs > 0}
+          >
+            {exporting ? (
+              <Loader2 className='size-3.5 animate-spin' />
+            ) : (
+              <Download className='size-3.5' />
+            )}
+            {t('Export logs')}
           </Button>
           <Button size='sm' className='h-8' onClick={handleApply} disabled={fetchingLogs > 0}>
             {fetchingLogs > 0 ? (

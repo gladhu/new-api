@@ -288,6 +288,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
+		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
 		logRoute.GET("/admin/export/monthly_bill", middleware.AdminAuth(), controller.ExportAdminUserMonthlyBill)
 		logRoute.GET("/admin/export/consumption_details", middleware.AdminAuth(), controller.ExportAdminUserConsumptionDetails)
 		logRoute.GET("/admin/export/monthly_bill_and_consumption_details", middleware.AdminAuth(), controller.ExportAdminUserMonthlyBillAndConsumptionDetails)
@@ -297,6 +298,7 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
 		dataRoute := apiRouter.Group("/data")
