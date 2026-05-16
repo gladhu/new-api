@@ -70,6 +70,26 @@
         color: rgba(71, 85, 105, 0.85);
       }
 
+      html.light .hero-api-hint {
+        color: rgba(71, 85, 105, 0.88);
+      }
+
+      html.light .hero-api-row {
+        background: #ffffff;
+        border-color: rgba(15, 23, 42, 0.12);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      }
+
+      html.light .hero-api-input {
+        color: var(--text);
+      }
+
+      html.light .hero-api-endpoint {
+        background: rgba(124, 58, 237, 0.06);
+        border-color: rgba(124, 58, 237, 0.16);
+        color: #475569;
+      }
+
       html.light .pill {
         background: rgba(124, 58, 237, 0.06);
         border-color: rgba(124, 58, 237, 0.18);
@@ -355,8 +375,102 @@
         color: var(--muted);
       }
 
+      .hero-api {
+        margin: 1.75rem auto 0;
+        max-width: 36rem;
+        width: 100%;
+      }
+
+      .hero-api-hint {
+        margin: 0 0 0.65rem;
+        font-size: 0.92rem;
+        color: rgba(244, 244, 248, 0.58);
+      }
+
+      .hero-api-row {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        overflow: hidden;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      }
+
+      .hero-api-input {
+        flex: 1;
+        min-width: 0;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 0.88rem;
+        padding: 0.7rem 1rem;
+        outline: none;
+        text-align: left;
+      }
+
+      .hero-api-endpoint {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        max-width: 42%;
+        padding: 0 0.75rem;
+        font-size: 0.78rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        color: var(--muted);
+        border-left: 1px solid var(--border);
+        background: rgba(139, 92, 246, 0.1);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .hero-api-copy {
+        flex-shrink: 0;
+        border: none;
+        border-left: 1px solid var(--border);
+        border-radius: 0;
+        padding: 0.7rem 1rem;
+        font-size: 0.85rem;
+        box-shadow: none;
+      }
+
+      .hero-api-copy:hover {
+        box-shadow: none;
+      }
+
+      .hero-api-copy.is-copied {
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+      }
+
+      @media (max-width: 640px) {
+        .hero-api-row {
+          flex-wrap: wrap;
+          border-radius: var(--radius);
+        }
+
+        .hero-api-input {
+          width: 100%;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .hero-api-endpoint {
+          max-width: none;
+          flex: 1;
+          border-left: none;
+        }
+
+        .hero-api-copy {
+          border-left: none;
+          border-top: 1px solid var(--border);
+          width: 100%;
+        }
+      }
+
       .hero-actions {
-        margin-top: 2rem;
+        margin-top: 1.5rem;
         display: flex;
         flex-wrap: wrap;
         gap: 0.75rem;
@@ -608,6 +722,35 @@
             调用方案，打造<strong>稳定可靠、易于治理</strong>
             的接口平台，一站式集成几乎所有AI大模型，支撑业务持续增长。
           </p>
+          <div class="hero-api" id="hero-api">
+            <p class="hero-api-hint">
+              更好的价格，更好的稳定性，只需要将模型基址替换为：
+            </p>
+            <div class="hero-api-row">
+              <input
+                type="text"
+                class="hero-api-input"
+                id="hero-api-url"
+                readonly
+                value=""
+                aria-label="API 地址"
+              />
+              <span
+                class="hero-api-endpoint"
+                id="hero-api-endpoint"
+                aria-live="polite"
+                >/v1/chat/completions</span
+              >
+              <button
+                type="button"
+                class="btn btn-primary hero-api-copy"
+                id="hero-api-copy"
+                aria-label="复制 API 地址"
+              >
+                复制
+              </button>
+            </div>
+          </div>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/register" target="_top">
               免费开通
@@ -785,6 +928,114 @@
           }
           if (t === 'light' || t === 'dark') applyTheme(t)
         })
+
+        var API_ENDPOINTS = [
+          '/v1/chat/completions',
+          '/v1/responses',
+          '/v1/responses/compact',
+          '/v1/messages',
+          '/v1beta/models',
+          '/v1/embeddings',
+          '/v1/rerank',
+          '/v1/images/generations',
+          '/v1/images/edits',
+          '/v1/images/variations',
+          '/v1/audio/speech',
+          '/v1/audio/transcriptions',
+          '/v1/audio/translations',
+        ]
+        var apiUrlInput = document.getElementById('hero-api-url')
+        var apiEndpointEl = document.getElementById('hero-api-endpoint')
+        var apiCopyBtn = document.getElementById('hero-api-copy')
+        var endpointIndex = 0
+        var copyResetTimer = null
+
+        function defaultServerAddress() {
+          return window.location.origin.replace(/\/$/, '')
+        }
+
+        function setServerAddress(addr) {
+          if (!apiUrlInput) return
+          var value =
+            addr && String(addr).trim()
+              ? String(addr).trim().replace(/\/$/, '')
+              : defaultServerAddress()
+          apiUrlInput.value = value
+        }
+
+        function loadServerAddress() {
+          fetch('/api/status')
+            .then(function (res) {
+              return res.json()
+            })
+            .then(function (body) {
+              if (body && body.success && body.data && body.data.server_address) {
+                setServerAddress(body.data.server_address)
+              } else {
+                setServerAddress('')
+              }
+            })
+            .catch(function () {
+              setServerAddress('')
+            })
+        }
+
+        function rotateEndpoint() {
+          if (!apiEndpointEl || !API_ENDPOINTS.length) return
+          endpointIndex = (endpointIndex + 1) % API_ENDPOINTS.length
+          apiEndpointEl.textContent = API_ENDPOINTS[endpointIndex]
+        }
+
+        function copyServerAddress() {
+          if (!apiUrlInput) return
+          var text = apiUrlInput.value || defaultServerAddress()
+          function onCopied() {
+            if (!apiCopyBtn) return
+            apiCopyBtn.textContent = '已复制'
+            apiCopyBtn.classList.add('is-copied')
+            if (copyResetTimer) clearTimeout(copyResetTimer)
+            copyResetTimer = setTimeout(function () {
+              apiCopyBtn.textContent = '复制'
+              apiCopyBtn.classList.remove('is-copied')
+            }, 1600)
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(onCopied).catch(function () {
+              fallbackCopy(text, onCopied)
+            })
+          } else {
+            fallbackCopy(text, onCopied)
+          }
+        }
+
+        function fallbackCopy(text, done) {
+          var ta = document.createElement('textarea')
+          ta.value = text
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.left = '-9999px'
+          document.body.appendChild(ta)
+          ta.select()
+          try {
+            document.execCommand('copy')
+            if (done) done()
+          } catch (err) {
+            /* ignore */
+          }
+          document.body.removeChild(ta)
+        }
+
+        if (apiUrlInput) {
+          setServerAddress('')
+          loadServerAddress()
+        }
+        if (apiEndpointEl && API_ENDPOINTS.length) {
+          apiEndpointEl.textContent = API_ENDPOINTS[0]
+          setInterval(rotateEndpoint, 3000)
+        }
+        if (apiCopyBtn) {
+          apiCopyBtn.addEventListener('click', copyServerAddress)
+        }
       })()
     </script>
   </body>
