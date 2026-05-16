@@ -96,7 +96,7 @@ export const DEFAULT_CONFIG = {
     imageUrls: [''],
   },
   parameterEnabled: {
-    temperature: true,
+    temperature: false,
     top_p: true,
     max_tokens: false,
     frequency_penalty: true,
