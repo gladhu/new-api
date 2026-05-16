@@ -506,6 +506,54 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
+// ConsumptionAggregate summarizes consume logs for a channel (optionally scoped to one user).
+type ConsumptionAggregate struct {
+	Quota            int64 `json:"quota"`
+	RequestCount     int64 `json:"request_count"`
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+}
+
+const maxConsumptionRangeSeconds = 366 * 24 * 3600
+
+func SumChannelConsumption(channelId int, userId int, username string, startTimestamp, endTimestamp int64) (ConsumptionAggregate, error) {
+	var agg ConsumptionAggregate
+	if channelId <= 0 {
+		return agg, errors.New("invalid channel id")
+	}
+	if startTimestamp <= 0 || endTimestamp <= 0 {
+		return agg, errors.New("invalid time range")
+	}
+	if endTimestamp < startTimestamp {
+		return agg, errors.New("end_timestamp must be greater than or equal to start_timestamp")
+	}
+	if endTimestamp-startTimestamp > maxConsumptionRangeSeconds {
+		return agg, fmt.Errorf("time range cannot exceed %d days", maxConsumptionRangeSeconds/(24*3600))
+	}
+
+	tx := LOG_DB.Model(&Log{}).
+		Where("type = ?", LogTypeConsume).
+		Where("channel_id = ?", channelId)
+	if userId > 0 {
+		tx = tx.Where("user_id = ?", userId)
+	} else if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+	tx = tx.Where("created_at >= ?", startTimestamp).Where("created_at <= ?", endTimestamp)
+
+	err := tx.Select(
+		"COALESCE(SUM(quota), 0) AS quota",
+		"COUNT(*) AS request_count",
+		"COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens",
+		"COALESCE(SUM(completion_tokens), 0) AS completion_tokens",
+	).Scan(&agg).Error
+	if err != nil {
+		common.SysError("failed to sum channel consumption: " + err.Error())
+		return agg, errors.New("查询渠道消费统计失败")
+	}
+	return agg, nil
+}
+
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
 	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
 

@@ -8,6 +8,7 @@ import {
   TestTube,
   Gauge,
   DollarSign,
+  BarChart3,
   Download,
   Copy,
   Power,
@@ -87,6 +88,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const handleQueryBalance = () => {
     setCurrentRow(channel)
     setOpen('balance-query')
+  }
+
+  const handleViewConsumption = () => {
+    setCurrentRow(channel)
+    setOpen('channel-consumption')
   }
 
   const handleFetchModels = () => {
@@ -202,6 +208,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             {t('Query Balance')}
             <DropdownMenuShortcut>
               <DollarSign size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem onClick={handleViewConsumption}>
+            {t('Channel Consumption')}
+            <DropdownMenuShortcut>
+              <BarChart3 size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
 

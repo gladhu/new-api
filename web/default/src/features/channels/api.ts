@@ -521,6 +521,47 @@ export async function getOllamaVersion(
 }
 
 // ============================================================================
+// Channel Consumption Statistics
+// ============================================================================
+
+export type GetChannelConsumptionParams = {
+  start_timestamp: number
+  end_timestamp: number
+  user_id?: number
+  username?: string
+}
+
+export type ChannelConsumptionData = {
+  channel_id: number
+  channel_name: string
+  start_timestamp: number
+  end_timestamp: number
+  quota: number
+  request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+  lifetime_used_quota: number
+  user_id?: number
+  username?: string
+}
+
+export type ChannelConsumptionResponse = {
+  success: boolean
+  message?: string
+  data?: ChannelConsumptionData
+}
+
+export async function getChannelConsumption(
+  channelId: number,
+  params: GetChannelConsumptionParams
+): Promise<ChannelConsumptionResponse> {
+  const res = await api.get(`/api/channel/${channelId}/consumption`, {
+    params,
+  })
+  return res.data
+}
+
+// ============================================================================
 // Group Management
 // ============================================================================
 

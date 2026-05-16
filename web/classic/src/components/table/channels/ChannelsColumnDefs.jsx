@@ -43,6 +43,7 @@ import {
   CHANNEL_OPTIONS,
   MODEL_FETCHABLE_CHANNEL_TYPES,
 } from '../../../constants';
+import { openChannelConsumptionModal } from './modals/ChannelConsumptionModal';
 import { parseUpstreamUpdateMeta } from '../../../hooks/channels/upstreamUpdateUtils';
 import {
   IconTreeTriangleDown,
@@ -724,6 +725,12 @@ export const getChannelsColumns = ({
                   onOk: () => copySelectedChannel(record),
                 });
               },
+            },
+            {
+              node: 'item',
+              name: t('渠道消费统计'),
+              type: 'tertiary',
+              onClick: () => openChannelConsumptionModal({ t, record }),
             },
           ];
 
