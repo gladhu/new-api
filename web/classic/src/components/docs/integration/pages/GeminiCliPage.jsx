@@ -24,7 +24,7 @@ import DocCodeBlock, { DocInlineCode } from '../DocCodeBlock';
 import { DocPageHeader, DocSection, DocStepList, DocBulletList } from '../DocSection';
 import { FACEAPI_BASE_URL } from '../constants';
 
-const GEMINI_ENV = `GOOGLE_GEMINI_BASE_URL=${FACEAPI_BASE_URL}/gemini
+const GEMINI_ENV = `GOOGLE_GEMINI_BASE_URL=${FACEAPI_BASE_URL}
 GEMINI_API_KEY=sk-xxxx
 GEMINI_MODEL=gemini-2.5-flash`;
 
