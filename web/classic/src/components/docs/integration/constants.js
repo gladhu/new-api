@@ -39,7 +39,7 @@ export const INTEGRATION_NAV_ITEMS = [
     path: '/docs/integration/codex',
     titleKey: 'Codex',
     descriptionKey:
-      'Use OpenAI Codex CLI with FaceCloud via OpenAI-compatible chat completions.',
+      'Configure OpenAI Codex CLI to use FaceCloud through codex-relay (recommended).',
     icon: Code2,
   },
   {
