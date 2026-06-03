@@ -242,8 +242,19 @@ export async function setup2FA() {
 }
 
 // Enable 2FA with verification code
-export async function enable2FA(code: string) {
-  const res = await api.post('/api/user/2fa/enable', { code })
+export async function enable2FA(code: string, deviceId?: number) {
+  const res = await api.post('/api/user/2fa/enable', {
+    code,
+    device_id: deviceId,
+  })
+  return res.data
+}
+
+// Delete a 2FA device
+export async function delete2FADevice(deviceId: number, code: string) {
+  const res = await api.delete(`/api/user/2fa/devices/${deviceId}`, {
+    data: { code },
+  })
   return res.data
 }
 

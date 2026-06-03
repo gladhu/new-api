@@ -17,8 +17,9 @@ const (
 	BackupCodeCount  = 4 // 生成备用码数量
 
 	// 限制配置
-	MaxFailAttempts = 5   // 最大失败尝试次数
-	LockoutDuration = 300 // 锁定时间（秒）
+	MaxFailAttempts  = 5 // 最大失败尝试次数
+	LockoutDuration  = 300 // 锁定时间（秒）
+	MaxTwoFADevices  = 3 // 每个用户最多绑定的 TOTP 设备数
 )
 
 // GenerateTOTPSecret 生成TOTP密钥和配置

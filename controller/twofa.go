@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -17,54 +18,88 @@ type Setup2FARequest struct {
 	Code string `json:"code" binding:"required"`
 }
 
+// Enable2FARequest 启用2FA请求结构
+type Enable2FARequest struct {
+	Code     string `json:"code" binding:"required"`
+	DeviceId int    `json:"device_id"`
+}
+
 // Verify2FARequest 验证2FA请求结构
 type Verify2FARequest struct {
 	Code string `json:"code" binding:"required"`
 }
 
-// Setup2FAResponse 设置2FA响应结构
-type Setup2FAResponse struct {
-	Secret      string   `json:"secret"`
-	QRCodeData  string   `json:"qr_code_data"`
-	BackupCodes []string `json:"backup_codes"`
+// Delete2FADeviceRequest 删除2FA设备请求结构
+type Delete2FADeviceRequest struct {
+	Code string `json:"code" binding:"required"`
 }
 
-// Setup2FA 初始化2FA设置
+// Setup2FAResponse 设置2FA响应结构
+type Setup2FAResponse struct {
+	DeviceId     int      `json:"device_id"`
+	Secret       string   `json:"secret"`
+	QRCodeData   string   `json:"qr_code_data"`
+	BackupCodes  []string `json:"backup_codes,omitempty"`
+	IsAdditional bool     `json:"is_additional"`
+}
+
+// Setup2FA 初始化2FA设置或添加新的 TOTP 设备
 func Setup2FA(c *gin.Context) {
 	userId := c.GetInt("id")
 
-	// 检查用户是否已经启用2FA
 	existing, err := model.GetTwoFAByUserId(userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if existing != nil && existing.IsEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "用户已启用2FA，请先禁用后重新设置",
-		})
-		return
-	}
 
-	// 如果存在已禁用的2FA记录，先删除它
-	if existing != nil && !existing.IsEnabled {
-		if err := existing.Delete(); err != nil {
+	isAdditional := existing != nil && existing.IsEnabled
+	if isAdditional {
+		total, err := model.CountTotalActiveAuthenticators(userId, existing)
+		if err != nil {
 			common.ApiError(c, err)
 			return
 		}
-		existing = nil // 重置为nil，后续将创建新记录
+		if total >= common.MaxTwoFADevices {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("最多只能绑定 %d 个验证器", common.MaxTwoFADevices),
+			})
+			return
+		}
+		if err := model.DeletePendingTwoFADevices(userId); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if existing != nil && !existing.IsEnabled {
+		if err := model.DeletePendingTwoFADevices(userId); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 
-	// 获取用户信息
 	user, err := model.GetUserById(userId, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	// 生成TOTP密钥
-	key, err := common.GenerateTOTPSecret(user.Username)
+	activeCount := 0
+	if isAdditional {
+		activeCount, err = model.CountTotalActiveAuthenticators(userId, existing)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+
+	deviceIndex := activeCount + 1
+	accountName := user.Username
+	if deviceIndex > 1 {
+		accountName = fmt.Sprintf("%s (%d)", user.Username, deviceIndex)
+	}
+
+	key, err := common.GenerateTOTPSecret(accountName)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -74,68 +109,82 @@ func Setup2FA(c *gin.Context) {
 		return
 	}
 
-	// 生成备用码
-	backupCodes, err := common.GenerateBackupCodes()
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "生成备用码失败",
-		})
-		common.SysLog("生成备用码失败: " + err.Error())
-		return
+	var backupCodes []string
+	if !isAdditional {
+		backupCodes, err = common.GenerateBackupCodes()
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "生成备用码失败",
+			})
+			common.SysLog("生成备用码失败: " + err.Error())
+			return
+		}
 	}
 
-	// 生成二维码数据
-	qrCodeData := common.GenerateQRCodeData(key.Secret(), user.Username)
+	qrCodeData := common.GenerateQRCodeData(key.Secret(), accountName)
 
-	// 创建或更新2FA记录（暂未启用）
-	twoFA := &model.TwoFA{
-		UserId:    userId,
-		Secret:    key.Secret(),
-		IsEnabled: false,
-	}
-
-	if existing != nil {
-		// 更新现有记录
-		twoFA.Id = existing.Id
-		err = twoFA.Update()
+	var responseDeviceID int
+	if isAdditional {
+		deviceLabel := fmt.Sprintf("Authenticator %d", deviceIndex)
+		device, err := model.CreateTwoFADevice(userId, key.Secret(), deviceLabel, true)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		responseDeviceID = device.Id
 	} else {
-		// 创建新记录
-		err = twoFA.Create()
+		if existing == nil {
+			twoFA := &model.TwoFA{
+				UserId:    userId,
+				Secret:    key.Secret(),
+				IsEnabled: false,
+			}
+			if err := twoFA.Create(); err != nil {
+				common.ApiError(c, err)
+				return
+			}
+		} else {
+			existing.Secret = key.Secret()
+			if err := existing.Update(); err != nil {
+				common.ApiError(c, err)
+				return
+			}
+		}
+
+		if err := model.CreateBackupCodes(userId, backupCodes); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "保存备用码失败",
+			})
+			common.SysLog("保存备用码失败: " + err.Error())
+			return
+		}
+		responseDeviceID = model.LegacyPrimaryDeviceID
 	}
 
-	if err != nil {
-		common.ApiError(c, err)
-		return
+	logMessage := "开始设置两步验证"
+	if isAdditional {
+		logMessage = fmt.Sprintf("开始添加第 %d 个两步验证设备", deviceIndex)
 	}
-
-	// 创建备用码记录
-	if err := model.CreateBackupCodes(userId, backupCodes); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "保存备用码失败",
-		})
-		common.SysLog("保存备用码失败: " + err.Error())
-		return
-	}
-
-	// 记录操作日志
-	model.RecordLog(userId, model.LogTypeSystem, "开始设置两步验证")
+	model.RecordLog(userId, model.LogTypeSystem, logMessage)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "2FA设置初始化成功，请使用认证器扫描二维码并输入验证码完成设置",
 		"data": Setup2FAResponse{
-			Secret:      key.Secret(),
-			QRCodeData:  qrCodeData,
-			BackupCodes: backupCodes,
+			DeviceId:     responseDeviceID,
+			Secret:       key.Secret(),
+			QRCodeData:   qrCodeData,
+			BackupCodes:  backupCodes,
+			IsAdditional: isAdditional,
 		},
 	})
 }
 
-// Enable2FA 启用2FA
+// Enable2FA 启用2FA或确认新增设备
 func Enable2FA(c *gin.Context) {
-	var req Setup2FARequest
+	var req Enable2FARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -146,7 +195,6 @@ func Enable2FA(c *gin.Context) {
 
 	userId := c.GetInt("id")
 
-	// 获取2FA记录
 	twoFA, err := model.GetTwoFAByUserId(userId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -159,15 +207,7 @@ func Enable2FA(c *gin.Context) {
 		})
 		return
 	}
-	if twoFA.IsEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "2FA已经启用",
-		})
-		return
-	}
 
-	// 验证TOTP验证码
 	cleanCode, err := common.ValidateNumericCode(req.Code)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -177,7 +217,56 @@ func Enable2FA(c *gin.Context) {
 		return
 	}
 
-	if !common.ValidateTOTPCode(twoFA.Secret, cleanCode) {
+	if req.DeviceId <= model.LegacyPrimaryDeviceID {
+		valid, err := twoFA.ValidateLegacyTOTPAndUpdateUsage(cleanCode)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		if !valid {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "验证码或备用码错误，请重试",
+			})
+			return
+		}
+		if err := twoFA.Enable(); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		model.RecordLog(userId, model.LogTypeSystem, "成功启用两步验证")
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "两步验证启用成功",
+		})
+		return
+	}
+
+	device, err := model.GetTwoFADeviceById(userId, req.DeviceId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if device == nil || !device.IsPending {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "未找到待确认的验证器，请重新发起设置",
+		})
+		return
+	}
+
+	valid, err := twoFA.ValidateTOTPForDevice(cleanCode, device.Id)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	if !valid {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "验证码或备用码错误，请重试",
@@ -185,18 +274,15 @@ func Enable2FA(c *gin.Context) {
 		return
 	}
 
-	// 启用2FA
-	if err := twoFA.Enable(); err != nil {
+	if err := device.Activate(); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	// 记录操作日志
-	model.RecordLog(userId, model.LogTypeSystem, "成功启用两步验证")
-
+	model.RecordLog(userId, model.LogTypeSystem, fmt.Sprintf("成功添加两步验证设备：%s", device.Label))
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "两步验证启用成功",
+		"message": "验证器添加成功",
 	})
 }
 
@@ -213,7 +299,6 @@ func Disable2FA(c *gin.Context) {
 
 	userId := c.GetInt("id")
 
-	// 获取2FA记录
 	twoFA, err := model.GetTwoFAByUserId(userId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -227,25 +312,117 @@ func Disable2FA(c *gin.Context) {
 		return
 	}
 
-	// 验证TOTP验证码或备用码
-	cleanCode, err := common.ValidateNumericCode(req.Code)
+	if !verifyTwoFACode(twoFA, req.Code, c) {
+		return
+	}
+
+	if err := model.DisableTwoFA(userId); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.RecordLog(userId, model.LogTypeSystem, "禁用两步验证")
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "两步验证已禁用",
+	})
+}
+
+// Delete2FADevice 删除单个 TOTP 设备
+func Delete2FADevice(c *gin.Context) {
+	deviceId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || deviceId <= 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "设备ID格式错误",
+		})
+		return
+	}
+
+	var req Delete2FADeviceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+
+	userId := c.GetInt("id")
+	twoFA, err := model.GetTwoFAByUserId(userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if twoFA == nil || !twoFA.IsEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "用户未启用2FA",
+		})
+		return
+	}
+
+	device, err := model.GetTwoFADeviceById(userId, deviceId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if device == nil || device.IsPending {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "设备不存在",
+		})
+		return
+	}
+
+	activeCount, err := model.CountTotalActiveAuthenticators(userId, twoFA)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if activeCount <= 1 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "至少保留一个验证器，如需关闭请禁用两步验证",
+		})
+		return
+	}
+
+	if !verifyTwoFACode(twoFA, req.Code, c) {
+		return
+	}
+
+	deviceLabel := device.Label
+	if err := model.DeleteTwoFADeviceById(userId, deviceId); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.RecordLog(userId, model.LogTypeSystem, fmt.Sprintf("删除两步验证设备：%s", deviceLabel))
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "验证器已删除",
+	})
+}
+
+func verifyTwoFACode(twoFA *model.TwoFA, code string, c *gin.Context) bool {
+	cleanCode, err := common.ValidateNumericCode(code)
 	isValidTOTP := false
 	isValidBackup := false
 
 	if err == nil {
-		// 尝试验证TOTP
 		isValidTOTP, _ = twoFA.ValidateTOTPAndUpdateUsage(cleanCode)
 	}
 
 	if !isValidTOTP {
-		// 尝试验证备用码
-		isValidBackup, err = twoFA.ValidateBackupCodeAndUpdateUsage(req.Code)
+		isValidBackup, err = twoFA.ValidateBackupCodeAndUpdateUsage(code)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
 			})
-			return
+			return false
 		}
 	}
 
@@ -254,22 +431,10 @@ func Disable2FA(c *gin.Context) {
 			"success": false,
 			"message": "验证码或备用码错误，请重试",
 		})
-		return
+		return false
 	}
 
-	// 禁用2FA
-	if err := model.DisableTwoFA(userId); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-
-	// 记录操作日志
-	model.RecordLog(userId, model.LogTypeSystem, "禁用两步验证")
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "两步验证已禁用",
-	})
+	return true
 }
 
 // Get2FAStatus 获取用户2FA状态
@@ -283,21 +448,67 @@ func Get2FAStatus(c *gin.Context) {
 	}
 
 	status := map[string]interface{}{
-		"enabled": false,
-		"locked":  false,
+		"enabled":      false,
+		"locked":       false,
+		"device_count": 0,
+		"max_devices":  common.MaxTwoFADevices,
+		"devices":      []map[string]interface{}{},
 	}
 
 	if twoFA != nil {
 		status["enabled"] = twoFA.IsEnabled
 		status["locked"] = twoFA.IsLocked()
 		if twoFA.IsEnabled {
-			// 获取剩余备用码数量
 			backupCount, err := model.GetUnusedBackupCodeCount(userId)
 			if err != nil {
 				common.SysLog("获取备用码数量失败: " + err.Error())
 			} else {
 				status["backup_codes_remaining"] = backupCount
 			}
+
+			devices, err := model.GetEffectiveActiveTwoFADevices(twoFA)
+			if err != nil {
+				common.ApiError(c, err)
+				return
+			}
+
+			totalCount, err := model.CountTotalActiveAuthenticators(userId, twoFA)
+			if err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			status["device_count"] = totalCount
+
+			deviceList := make([]map[string]interface{}, 0, len(devices)+1)
+			if model.HasLegacyPrimarySecret(twoFA) {
+				primary := map[string]interface{}{
+					"id":         model.LegacyPrimaryDeviceID,
+					"label":      "Authenticator 1",
+					"is_primary": true,
+				}
+				if !twoFA.CreatedAt.IsZero() {
+					primary["created_at"] = twoFA.CreatedAt.Unix()
+				}
+				if twoFA.LastUsedAt != nil {
+					primary["last_used_at"] = twoFA.LastUsedAt.Unix()
+				}
+				deviceList = append(deviceList, primary)
+			}
+			for _, device := range devices {
+				item := map[string]interface{}{
+					"id":         device.Id,
+					"label":      device.Label,
+					"is_primary": false,
+				}
+				if !device.CreatedAt.IsZero() {
+					item["created_at"] = device.CreatedAt.Unix()
+				}
+				if device.LastUsedAt != nil {
+					item["last_used_at"] = device.LastUsedAt.Unix()
+				}
+				deviceList = append(deviceList, item)
+			}
+			status["devices"] = deviceList
 		}
 	}
 
@@ -321,7 +532,6 @@ func RegenerateBackupCodes(c *gin.Context) {
 
 	userId := c.GetInt("id")
 
-	// 获取2FA记录
 	twoFA, err := model.GetTwoFAByUserId(userId)
 	if err != nil {
 		common.ApiError(c, err)
@@ -335,7 +545,6 @@ func RegenerateBackupCodes(c *gin.Context) {
 		return
 	}
 
-	// 验证TOTP验证码
 	cleanCode, err := common.ValidateNumericCode(req.Code)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -361,7 +570,6 @@ func RegenerateBackupCodes(c *gin.Context) {
 		return
 	}
 
-	// 生成新的备用码
 	backupCodes, err := common.GenerateBackupCodes()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -372,7 +580,6 @@ func RegenerateBackupCodes(c *gin.Context) {
 		return
 	}
 
-	// 保存新的备用码
 	if err := model.CreateBackupCodes(userId, backupCodes); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -382,7 +589,6 @@ func RegenerateBackupCodes(c *gin.Context) {
 		return
 	}
 
-	// 记录操作日志
 	model.RecordLog(userId, model.LogTypeSystem, "重新生成两步验证备用码")
 
 	c.JSON(http.StatusOK, gin.H{
@@ -405,7 +611,6 @@ func Verify2FALogin(c *gin.Context) {
 		return
 	}
 
-	// 从会话中获取pending用户信息
 	session := sessions.Default(c)
 	pendingUserId := session.Get("pending_user_id")
 	if pendingUserId == nil {
@@ -423,7 +628,7 @@ func Verify2FALogin(c *gin.Context) {
 		})
 		return
 	}
-	// 获取用户信息
+
 	user, err := model.GetUserById(userId, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -433,7 +638,6 @@ func Verify2FALogin(c *gin.Context) {
 		return
 	}
 
-	// 获取2FA记录
 	twoFA, err := model.GetTwoFAByUserId(user.Id)
 	if err != nil {
 		common.ApiError(c, err)
@@ -447,37 +651,10 @@ func Verify2FALogin(c *gin.Context) {
 		return
 	}
 
-	// 验证TOTP验证码或备用码
-	cleanCode, err := common.ValidateNumericCode(req.Code)
-	isValidTOTP := false
-	isValidBackup := false
-
-	if err == nil {
-		// 尝试验证TOTP
-		isValidTOTP, _ = twoFA.ValidateTOTPAndUpdateUsage(cleanCode)
-	}
-
-	if !isValidTOTP {
-		// 尝试验证备用码
-		isValidBackup, err = twoFA.ValidateBackupCodeAndUpdateUsage(req.Code)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	}
-
-	if !isValidTOTP && !isValidBackup {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "验证码或备用码错误，请重试",
-		})
+	if !verifyTwoFACode(twoFA, req.Code, c) {
 		return
 	}
 
-	// 2FA验证成功，清理pending会话信息并完成登录
 	session.Delete("pending_username")
 	session.Delete("pending_user_id")
 	session.Save()
@@ -512,7 +689,6 @@ func AdminDisable2FA(c *gin.Context) {
 		return
 	}
 
-	// 检查目标用户权限
 	targetUser, err := model.GetUserById(userId, false)
 	if err != nil {
 		common.ApiError(c, err)
@@ -528,7 +704,6 @@ func AdminDisable2FA(c *gin.Context) {
 		return
 	}
 
-	// 禁用2FA
 	if err := model.DisableTwoFA(userId); err != nil {
 		if errors.Is(err, model.ErrTwoFANotEnabled) {
 			c.JSON(http.StatusOK, gin.H{
@@ -541,7 +716,6 @@ func AdminDisable2FA(c *gin.Context) {
 		return
 	}
 
-	// 记录操作日志：管理员身份通过 admin_info 传递，避免在非管理员可见的日志内容中泄露。
 	adminId := c.GetInt("id")
 	adminName := c.GetString("username")
 	adminInfo := map[string]interface{}{

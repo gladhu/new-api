@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useTranslation } from 'react-i18next'
@@ -37,20 +37,18 @@ import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/copy-button'
 import type { TwoFASetupData } from '../../types'
 
-// ============================================================================
-// Two-FA Setup Dialog Component
-// ============================================================================
-
 interface TwoFASetupDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
+  mode?: 'initial' | 'additional'
 }
 
 export function TwoFASetupDialog({
   open,
   onOpenChange,
   onSuccess,
+  mode = 'initial',
 }: TwoFASetupDialogProps) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
@@ -58,11 +56,16 @@ export function TwoFASetupDialog({
   const [step, setStep] = useState(0)
   const [setupData, setSetupData] = useState<TwoFASetupData | null>(null)
   const [code, setCode] = useState('')
-  const stepLabels = [
-    t('Scan QR Code'),
-    t('Save Backup Codes'),
-    t('Verify Setup'),
-  ]
+
+  const isAdditional = mode === 'additional' || setupData?.is_additional === true
+  const stepLabels = useMemo(
+    () =>
+      isAdditional
+        ? [t('Scan QR Code'), t('Verify Setup')]
+        : [t('Scan QR Code'), t('Save Backup Codes'), t('Verify Setup')],
+    [isAdditional, t]
+  )
+  const verifyStep = isAdditional ? 1 : 2
 
   const handleSetup = useCallback(async () => {
     try {
@@ -87,20 +90,23 @@ export function TwoFASetupDialog({
   }, [onOpenChange, t])
 
   const handleEnable = async () => {
-    if (!code) {
+    if (!code || !setupData) {
       toast.error(t('Please enter the verification code'))
       return
     }
 
     try {
       setLoading(true)
-      const response = await enable2FA(code)
+      const response = await enable2FA(code, setupData.device_id)
 
       if (response.success) {
-        toast.success(t('Two-factor authentication enabled successfully!'))
+        toast.success(
+          isAdditional
+            ? t('Authenticator added successfully')
+            : t('Two-factor authentication enabled successfully!')
+        )
         onOpenChange(false)
         onSuccess()
-        // Reset
         setStep(0)
         setCode('')
         setSetupData(null)
@@ -114,21 +120,20 @@ export function TwoFASetupDialog({
     }
   }
 
-  const handleOpenChange = (open: boolean) => {
+  const handleOpenChange = (nextOpen: boolean) => {
     if (!loading && !initializing) {
-      if (open && !setupData) {
+      if (nextOpen && !setupData) {
         handleSetup()
       }
-      if (!open) {
+      if (!nextOpen) {
         setStep(0)
         setCode('')
         setSetupData(null)
       }
-      onOpenChange(open)
+      onOpenChange(nextOpen)
     }
   }
 
-  // Initialize when dialog opens
   useEffect(() => {
     if (open && !setupData && !initializing) {
       handleSetup()
@@ -139,9 +144,14 @@ export function TwoFASetupDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className='sm:max-w-lg'>
         <DialogHeader>
-          <DialogTitle>{t('Setup Two-Factor Authentication')}</DialogTitle>
+          <DialogTitle>
+            {isAdditional
+              ? t('Add Authenticator')
+              : t('Setup Two-Factor Authentication')}
+          </DialogTitle>
           <DialogDescription>
-            {t('Step')} {step + 1} {t('of 3:')} {stepLabels[step]}
+            {t('Step')} {step + 1} {t('of {{total}}:', { total: stepLabels.length })}{' '}
+            {stepLabels[step]}
           </DialogDescription>
         </DialogHeader>
 
@@ -161,7 +171,6 @@ export function TwoFASetupDialog({
             </div>
           ) : (
             <>
-              {/* Step 0: QR Code */}
               {step === 0 && (
                 <div className='space-y-4'>
                   <p className='text-muted-foreground text-sm'>
@@ -193,8 +202,7 @@ export function TwoFASetupDialog({
                 </div>
               )}
 
-              {/* Step 1: Backup Codes */}
-              {step === 1 && (
+              {!isAdditional && step === 1 && (
                 <div className='space-y-4'>
                   <Alert>
                     <AlertDescription>
@@ -205,12 +213,12 @@ export function TwoFASetupDialog({
                   </Alert>
                   <div className='rounded-lg border p-4'>
                     <div className='grid grid-cols-2 gap-2'>
-                      {setupData.backup_codes.map((code, index) => (
+                      {setupData.backup_codes.map((backupCode, index) => (
                         <div
                           key={index}
                           className='bg-muted rounded-md p-2 text-center font-mono text-sm'
                         >
-                          {code}
+                          {backupCode}
                         </div>
                       ))}
                     </div>
@@ -229,8 +237,7 @@ export function TwoFASetupDialog({
                 </div>
               )}
 
-              {/* Step 2: Verify */}
-              {step === 2 && (
+              {step === verifyStep && (
                 <div className='space-y-4'>
                   <div className='space-y-2'>
                     <Label htmlFor='code'>{t('Verification Code')}</Label>
@@ -262,7 +269,7 @@ export function TwoFASetupDialog({
               {t('Back')}
             </Button>
           )}
-          {step < 2 ? (
+          {step < verifyStep ? (
             <Button
               onClick={() => setStep(step + 1)}
               disabled={initializing || !setupData}
@@ -275,7 +282,13 @@ export function TwoFASetupDialog({
               disabled={initializing || loading || !code}
             >
               {loading && <Loader2 className='mr-2 h-4 w-4 animate-spin' />}
-              {loading ? t('Enabling...') : t('Enable 2FA')}
+              {loading
+                ? isAdditional
+                  ? t('Adding...')
+                  : t('Enabling...')
+                : isAdditional
+                  ? t('Add Authenticator')
+                  : t('Enable 2FA')}
             </Button>
           )}
         </DialogFooter>

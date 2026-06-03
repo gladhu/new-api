@@ -168,21 +168,37 @@ export interface BindingItem {
 }
 
 /**
+ * Two-Factor Authentication device
+ */
+export interface TwoFADevice {
+  id: number
+  label: string
+  is_primary?: boolean
+  created_at?: number
+  last_used_at?: number
+}
+
+/**
  * Two-Factor Authentication Status
  */
 export interface TwoFAStatus {
   enabled: boolean
   locked: boolean
   backup_codes_remaining: number
+  device_count: number
+  max_devices: number
+  devices: TwoFADevice[]
 }
 
 /**
  * Two-Factor Authentication Setup Data
  */
 export interface TwoFASetupData {
+  device_id: number
   secret: string
   qr_code_data: string
   backup_codes: string[]
+  is_additional?: boolean
 }
 
 // ============================================================================

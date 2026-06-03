@@ -10,11 +10,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// TwoFA 用户2FA设置表
+// TwoFA 用户2FA设置表（账户级：启用状态、锁定等）
 type TwoFA struct {
 	Id             int            `json:"id" gorm:"primaryKey"`
 	UserId         int            `json:"user_id" gorm:"unique;not null;index"`
-	Secret         string         `json:"-" gorm:"type:varchar(255);not null"` // TOTP密钥，不返回给前端
+	Secret         string         `json:"-" gorm:"type:varchar(255);not null"` // 主验证器 TOTP 密钥（与旧版兼容）
 	IsEnabled      bool           `json:"is_enabled"`
 	FailedAttempts int            `json:"failed_attempts" gorm:"default:0"`
 	LockedUntil    *time.Time     `json:"locked_until,omitempty"`
@@ -22,6 +22,19 @@ type TwoFA struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+// TwoFADevice 额外绑定的 TOTP 验证器（第 2、3 个；主验证器仍保存在 TwoFA.Secret）
+type TwoFADevice struct {
+	Id         int            `json:"id" gorm:"primaryKey"`
+	UserId     int            `json:"user_id" gorm:"not null;index"`
+	Secret     string         `json:"-" gorm:"type:varchar(255);not null"`
+	Label      string         `json:"label" gorm:"type:varchar(64);default:''"`
+	IsPending  bool           `json:"is_pending" gorm:"default:false"`
+	LastUsedAt *time.Time     `json:"last_used_at,omitempty"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // TwoFABackupCode 备用码使用记录表
@@ -60,6 +73,127 @@ func IsTwoFAEnabled(userId int) bool {
 		return false
 	}
 	return twoFA.IsEnabled
+}
+
+// LegacyPrimaryDeviceID 主验证器在 API 中的虚拟设备 ID（实际存储在 TwoFA.Secret）
+const LegacyPrimaryDeviceID = 0
+
+// HasLegacyPrimarySecret 是否已配置主验证器密钥
+func HasLegacyPrimarySecret(twoFA *TwoFA) bool {
+	return twoFA != nil && twoFA.Secret != ""
+}
+
+// CountTotalActiveAuthenticators 统计已启用的验证器总数（主验证器 + 额外设备）
+func CountTotalActiveAuthenticators(userId int, twoFA *TwoFA) (int, error) {
+	extraDevices, err := GetEffectiveActiveTwoFADevices(twoFA)
+	if err != nil {
+		return 0, err
+	}
+	total := len(extraDevices)
+	if twoFA != nil && twoFA.IsEnabled && HasLegacyPrimarySecret(twoFA) {
+		total++
+	}
+	return total, nil
+}
+
+// GetActiveTwoFADevicesByUserId 获取用户已启用的额外 TOTP 设备
+func GetActiveTwoFADevicesByUserId(userId int) ([]TwoFADevice, error) {
+	var devices []TwoFADevice
+	err := DB.Where("user_id = ? AND is_pending = ?", userId, false).
+		Order("id ASC").
+		Find(&devices).Error
+	return devices, err
+}
+
+// GetEffectiveActiveTwoFADevices 获取额外设备，并排除与主验证器密钥重复的记录（兼容历史迁移数据）
+func GetEffectiveActiveTwoFADevices(twoFA *TwoFA) ([]TwoFADevice, error) {
+	devices, err := GetActiveTwoFADevicesByUserId(twoFA.UserId)
+	if err != nil {
+		return nil, err
+	}
+	if !HasLegacyPrimarySecret(twoFA) {
+		return devices, nil
+	}
+
+	filtered := make([]TwoFADevice, 0, len(devices))
+	for _, device := range devices {
+		if device.Secret == twoFA.Secret {
+			continue
+		}
+		filtered = append(filtered, device)
+	}
+	return filtered, nil
+}
+
+// GetTwoFADeviceById 根据 ID 获取设备
+func GetTwoFADeviceById(userId, deviceId int) (*TwoFADevice, error) {
+	if deviceId == 0 {
+		return nil, errors.New("设备ID不能为空")
+	}
+
+	var device TwoFADevice
+	err := DB.Where("id = ? AND user_id = ?", deviceId, userId).First(&device).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &device, nil
+}
+
+// CountActiveTwoFADevices 统计用户已启用的 TOTP 设备数量
+func CountActiveTwoFADevices(userId int) (int, error) {
+	var count int64
+	err := DB.Model(&TwoFADevice{}).
+		Where("user_id = ? AND is_pending = ?", userId, false).
+		Count(&count).Error
+	return int(count), err
+}
+
+// DeletePendingTwoFADevices 删除用户所有待确认的设备
+func DeletePendingTwoFADevices(userId int) error {
+	return DB.Unscoped().Where("user_id = ? AND is_pending = ?", userId, true).Delete(&TwoFADevice{}).Error
+}
+
+// CreateTwoFADevice 创建 TOTP 设备
+func CreateTwoFADevice(userId int, secret, label string, isPending bool) (*TwoFADevice, error) {
+	device := &TwoFADevice{
+		UserId:    userId,
+		Secret:    secret,
+		Label:     label,
+		IsPending: isPending,
+	}
+	if err := DB.Create(device).Error; err != nil {
+		return nil, err
+	}
+	return device, nil
+}
+
+// ActivateTwoFADevice 将待确认设备标记为已启用
+func (d *TwoFADevice) Activate() error {
+	if d.Id == 0 {
+		return errors.New("设备ID不能为空")
+	}
+	d.IsPending = false
+	return DB.Save(d).Error
+}
+
+// DeleteTwoFADeviceById 删除指定设备
+func DeleteTwoFADeviceById(userId, deviceId int) error {
+	result := DB.Unscoped().Where("id = ? AND user_id = ?", deviceId, userId).Delete(&TwoFADevice{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("设备不存在")
+	}
+	return nil
+}
+
+// DeleteAllTwoFADevicesByUserId 删除用户全部额外 TOTP 设备
+func DeleteAllTwoFADevicesByUserId(userId int) error {
+	return DB.Unscoped().Where("user_id = ?", userId).Delete(&TwoFADevice{}).Error
 }
 
 // CreateTwoFA 创建2FA设置
@@ -101,6 +235,10 @@ func (t *TwoFA) Delete() error {
 
 	// 使用事务确保原子性
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Where("user_id = ?", t.UserId).Delete(&TwoFADevice{}).Error; err != nil {
+			return err
+		}
+
 		// 同时删除相关的备用码记录（硬删除）
 		if err := tx.Unscoped().Where("user_id = ?", t.UserId).Delete(&TwoFABackupCode{}).Error; err != nil {
 			return err
@@ -231,33 +369,101 @@ func (t *TwoFA) Enable() error {
 	return t.Update()
 }
 
-// ValidateTOTPAndUpdateUsage 验证TOTP并更新使用记录
-func (t *TwoFA) ValidateTOTPAndUpdateUsage(code string) (bool, error) {
-	// 检查是否被锁定
-	if t.IsLocked() {
-		return false, fmt.Errorf("账户已被锁定，请在%v后重试", t.LockedUntil.Format("2006-01-02 15:04:05"))
-	}
-
-	// 验证TOTP码
-	if !common.ValidateTOTPCode(t.Secret, code) {
-		// 增加失败次数
-		if err := t.IncrementFailedAttempts(); err != nil {
-			common.SysLog("更新2FA失败次数失败: " + err.Error())
-		}
-		return false, nil
-	}
-
-	// 验证成功，重置失败次数并更新最后使用时间
+func (t *TwoFA) markSuccessfulVerification(deviceId int) error {
 	now := time.Now()
 	t.FailedAttempts = 0
 	t.LockedUntil = nil
 	t.LastUsedAt = &now
 
 	if err := t.Update(); err != nil {
-		common.SysLog("更新2FA使用记录失败: " + err.Error())
+		return err
 	}
 
-	return true, nil
+	if deviceId > LegacyPrimaryDeviceID {
+		return DB.Model(&TwoFADevice{}).Where("id = ? AND user_id = ?", deviceId, t.UserId).
+			Update("last_used_at", now).Error
+	}
+	return nil
+}
+
+// ValidateTOTPAndUpdateUsage 验证TOTP并更新使用记录（主验证器或任一额外设备均可）
+func (t *TwoFA) ValidateTOTPAndUpdateUsage(code string) (bool, error) {
+	if t.IsLocked() {
+		return false, fmt.Errorf("账户已被锁定，请在%v后重试", t.LockedUntil.Format("2006-01-02 15:04:05"))
+	}
+
+	if t.IsEnabled && HasLegacyPrimarySecret(t) && common.ValidateTOTPCode(t.Secret, code) {
+		if err := t.markSuccessfulVerification(LegacyPrimaryDeviceID); err != nil {
+			common.SysLog("更新2FA使用记录失败: " + err.Error())
+		}
+		return true, nil
+	}
+
+	devices, err := GetEffectiveActiveTwoFADevices(t)
+	if err != nil {
+		return false, err
+	}
+	for _, device := range devices {
+		if common.ValidateTOTPCode(device.Secret, code) {
+			if err := t.markSuccessfulVerification(device.Id); err != nil {
+				common.SysLog("更新2FA使用记录失败: " + err.Error())
+			}
+			return true, nil
+		}
+	}
+
+	if err := t.IncrementFailedAttempts(); err != nil {
+		common.SysLog("更新2FA失败次数失败: " + err.Error())
+	}
+	return false, nil
+}
+
+// ValidateLegacyTOTPAndUpdateUsage 验证主验证器 TOTP（用于首次启用）
+func (t *TwoFA) ValidateLegacyTOTPAndUpdateUsage(code string) (bool, error) {
+	if t.IsLocked() {
+		return false, fmt.Errorf("账户已被锁定，请在%v后重试", t.LockedUntil.Format("2006-01-02 15:04:05"))
+	}
+	if !HasLegacyPrimarySecret(t) {
+		return false, nil
+	}
+	if common.ValidateTOTPCode(t.Secret, code) {
+		if err := t.markSuccessfulVerification(LegacyPrimaryDeviceID); err != nil {
+			common.SysLog("更新2FA使用记录失败: " + err.Error())
+		}
+		return true, nil
+	}
+	if err := t.IncrementFailedAttempts(); err != nil {
+		common.SysLog("更新2FA失败次数失败: " + err.Error())
+	}
+	return false, nil
+}
+
+// ValidateTOTPForDevice 验证指定额外设备的 TOTP 码（待确认或已启用）
+func (t *TwoFA) ValidateTOTPForDevice(code string, deviceId int) (bool, error) {
+	if deviceId <= LegacyPrimaryDeviceID {
+		return false, errors.New("无效的设备ID")
+	}
+	if t.IsLocked() {
+		return false, fmt.Errorf("账户已被锁定，请在%v后重试", t.LockedUntil.Format("2006-01-02 15:04:05"))
+	}
+
+	device, err := GetTwoFADeviceById(t.UserId, deviceId)
+	if err != nil {
+		return false, err
+	}
+	if device == nil {
+		return false, nil
+	}
+	if common.ValidateTOTPCode(device.Secret, code) {
+		if err := t.markSuccessfulVerification(device.Id); err != nil {
+			common.SysLog("更新2FA使用记录失败: " + err.Error())
+		}
+		return true, nil
+	}
+	if err := t.IncrementFailedAttempts(); err != nil {
+		common.SysLog("更新2FA失败次数失败: " + err.Error())
+	}
+	return false, nil
 }
 
 // ValidateBackupCodeAndUpdateUsage 验证备用码并更新使用记录
@@ -281,13 +487,7 @@ func (t *TwoFA) ValidateBackupCodeAndUpdateUsage(code string) (bool, error) {
 		return false, nil
 	}
 
-	// 验证成功，重置失败次数并更新最后使用时间
-	now := time.Now()
-	t.FailedAttempts = 0
-	t.LockedUntil = nil
-	t.LastUsedAt = &now
-
-	if err := t.Update(); err != nil {
+	if err := t.markSuccessfulVerification(0); err != nil {
 		common.SysLog("更新2FA使用记录失败: " + err.Error())
 	}
 

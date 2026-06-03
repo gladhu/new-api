@@ -112,6 +112,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/2fa/setup", controller.Setup2FA)
 				selfRoute.POST("/2fa/enable", controller.Enable2FA)
 				selfRoute.POST("/2fa/disable", controller.Disable2FA)
+				selfRoute.DELETE("/2fa/devices/:id", controller.Delete2FADevice)
 				selfRoute.POST("/2fa/backup_codes", controller.RegenerateBackupCodes)
 
 				// Check-in routes

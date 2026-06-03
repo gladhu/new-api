@@ -28,6 +28,9 @@ const DEFAULT_STATUS: TwoFAStatus = {
   enabled: false,
   locked: false,
   backup_codes_remaining: 0,
+  device_count: 0,
+  max_devices: 3,
+  devices: [],
 }
 
 export function useTwoFA(enabled = true) {

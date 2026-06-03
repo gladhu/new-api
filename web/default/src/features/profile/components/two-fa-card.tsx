@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Shield, AlertTriangle, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { Shield, AlertTriangle, RefreshCw, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useDialogs } from '@/hooks/use-dialog'
 import { Button } from '@/components/ui/button'
@@ -30,24 +31,31 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusBadge } from '@/components/status-badge'
 import { useTwoFA } from '../hooks'
+import type { TwoFADevice } from '../types'
 import { TwoFABackupDialog } from './dialogs/two-fa-backup-dialog'
+import { TwoFADeleteDeviceDialog } from './dialogs/two-fa-delete-device-dialog'
 import { TwoFADisableDialog } from './dialogs/two-fa-disable-dialog'
 import { TwoFASetupDialog } from './dialogs/two-fa-setup-dialog'
-
-// ============================================================================
-// Two-Factor Authentication Card Component
-// ============================================================================
 
 interface TwoFACardProps {
   loading: boolean
 }
 
-type DialogKey = 'setup' | 'disable' | 'backup'
+type DialogKey = 'setup' | 'addDevice' | 'disable' | 'backup' | 'deleteDevice'
 
 export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
   const { t } = useTranslation()
   const { status, loading, refetch } = useTwoFA(!pageLoading)
   const dialogs = useDialogs<DialogKey>()
+  const [deviceToDelete, setDeviceToDelete] = useState<TwoFADevice | null>(null)
+
+  const canAddDevice =
+    status.enabled && status.device_count < (status.max_devices || 3)
+
+  const handleDeleteDevice = (device: TwoFADevice) => {
+    setDeviceToDelete(device)
+    dialogs.open('deleteDevice')
+  }
 
   if (pageLoading || loading) {
     return (
@@ -77,7 +85,6 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
 
         <CardContent className='p-3 sm:p-5'>
           <div className='space-y-6'>
-            {/* Status Section */}
             <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between xl:flex-col 2xl:flex-row'>
               <div className='flex items-start gap-4'>
                 <div className='bg-muted rounded-md p-2'>
@@ -117,6 +124,14 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
                         })
                       : t('Add an extra layer of security to your account')}
                   </p>
+                  {status.enabled && (
+                    <p className='text-muted-foreground text-sm'>
+                      {t('Authenticators: {{count}}/{{max}}', {
+                        count: status.device_count,
+                        max: status.max_devices || 3,
+                      })}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -130,9 +145,53 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
               )}
             </div>
 
-            {/* Actions Section - Only show when enabled */}
+            {status.enabled && status.devices.length > 0 && (
+              <div className='space-y-3 border-t pt-6'>
+                <p className='text-sm font-medium'>{t('Registered Authenticators')}</p>
+                <div className='space-y-2'>
+                  {status.devices.map((device) => (
+                    <div
+                      key={device.id}
+                      className='flex items-center justify-between rounded-lg border px-3 py-2'
+                    >
+                      <div>
+                        <p className='text-sm font-medium'>{device.label}</p>
+                        {device.last_used_at ? (
+                          <p className='text-muted-foreground text-xs'>
+                            {t('Last used: {{date}}', {
+                              date: new Date(device.last_used_at * 1000).toLocaleString(),
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                      {status.device_count > 1 && !device.is_primary && device.id !== 0 ? (
+                        <Button
+                          variant='ghost'
+                          size='icon-sm'
+                          onClick={() => handleDeleteDevice(device)}
+                          aria-label={t('Remove authenticator')}
+                        >
+                          <Trash2 className='h-4 w-4' />
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {status.enabled && (
               <div className='flex flex-col gap-3 border-t pt-6 sm:flex-row xl:flex-col 2xl:flex-row'>
+                {canAddDevice ? (
+                  <Button
+                    variant='outline'
+                    className='flex-1'
+                    onClick={() => dialogs.open('addDevice')}
+                  >
+                    <Plus className='mr-2 h-4 w-4' />
+                    {t('Add Authenticator')}
+                  </Button>
+                ) : null}
                 <Button
                   variant='outline'
                   className='flex-1'
@@ -155,13 +214,22 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
         </CardContent>
       </Card>
 
-      {/* Dialogs */}
       <TwoFASetupDialog
         open={dialogs.isOpen('setup')}
         onOpenChange={(open) =>
           open ? dialogs.open('setup') : dialogs.close('setup')
         }
         onSuccess={refetch}
+        mode='initial'
+      />
+
+      <TwoFASetupDialog
+        open={dialogs.isOpen('addDevice')}
+        onOpenChange={(open) =>
+          open ? dialogs.open('addDevice') : dialogs.close('addDevice')
+        }
+        onSuccess={refetch}
+        mode='additional'
       />
 
       <TwoFADisableDialog
@@ -177,6 +245,18 @@ export function TwoFACard({ loading: pageLoading }: TwoFACardProps) {
         onOpenChange={(open) =>
           open ? dialogs.open('backup') : dialogs.close('backup')
         }
+        onSuccess={refetch}
+      />
+
+      <TwoFADeleteDeviceDialog
+        open={dialogs.isOpen('deleteDevice')}
+        onOpenChange={(open) => {
+          if (!open) {
+            dialogs.close('deleteDevice')
+            setDeviceToDelete(null)
+          }
+        }}
+        device={deviceToDelete}
         onSuccess={refetch}
       />
     </>
