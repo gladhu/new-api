@@ -17,7 +17,9 @@ const semiFoundationDir = path.resolve(
 const dateFnsDir = path.dirname(
   require.resolve('date-fns/package.json', { paths: [semiFoundationDir] }),
 )
-const vchartPkgDir = path.join(__dirname, 'node_modules', '@visactor', 'vchart')
+const vchartPkgDir = path.dirname(
+  require.resolve('@visactor/vchart/package.json', { paths: [__dirname] }),
+)
 const visactorPkgNames = [
   'vrender-core',
   'vrender-kits',
@@ -28,10 +30,17 @@ const visactorPkgNames = [
   'vutils-extension',
 ] as const
 const visactorAliases = Object.fromEntries(
-  visactorPkgNames.map((name) => [
-    `@visactor/${name}`,
-    path.join(vchartPkgDir, 'node_modules', '@visactor', name),
-  ]),
+  visactorPkgNames.flatMap((name) => {
+    const pkg = `@visactor/${name}`
+    try {
+      const pkgDir = path.dirname(
+        require.resolve(`${pkg}/package.json`, { paths: [vchartPkgDir, __dirname] }),
+      )
+      return [[pkg, pkgDir]]
+    } catch {
+      return []
+    }
+  }),
 )
 
 export default defineConfig(({ envMode }) => {
