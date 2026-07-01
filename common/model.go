@@ -57,3 +57,25 @@ func IsOpenAITextModel(modelName string) bool {
 	}
 	return false
 }
+
+// IsBedrockOpenAIModel reports whether the model is an OpenAI frontier model hosted on AWS Bedrock
+// (GPT-5.4 / GPT-5.5 / GPT-5.6), which only supports the OpenAI Responses API via bedrock-mantle endpoints.
+func IsBedrockOpenAIModel(modelName string) bool {
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	switch {
+	case strings.HasPrefix(modelName, "openai.gpt-5.4"):
+		return true
+	case strings.HasPrefix(modelName, "openai.gpt-5.5"):
+		return true
+	case strings.HasPrefix(modelName, "openai.gpt-5.6"):
+		return true
+	case strings.HasPrefix(modelName, "gpt-5.4"):
+		return true
+	case strings.HasPrefix(modelName, "gpt-5.5"):
+		return true
+	case strings.HasPrefix(modelName, "gpt-5.6"):
+		return true
+	default:
+		return false
+	}
+}

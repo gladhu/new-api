@@ -589,6 +589,18 @@ export async function getAllModels(): Promise<{
 }
 
 /**
+ * Get built-in model lists grouped by channel type.
+ */
+export async function getChannelTypeModelMap(): Promise<{
+  success: boolean
+  message?: string
+  data?: Record<string, string[]>
+}> {
+  const res = await api.get('/api/models')
+  return res.data
+}
+
+/**
  * Get all enabled models
  */
 export async function getEnabledModels(): Promise<{

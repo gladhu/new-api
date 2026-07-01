@@ -48,6 +48,8 @@ var ModelList = []string{
 	"gpt-5.3-codex",
 	"gpt-5.4", "gpt-5.4-2026-03-05",
 	"gpt-5.4-pro", "gpt-5.4-pro-2026-03-05",
+	"gpt-5.5", "gpt-5.5-2026-06-01",
+	"gpt-5.6", "gpt-5.6-2026-07-01",
 	"gpt-4o-audio-preview", "gpt-4o-audio-preview-2024-10-01", "gpt-4o-audio-preview-2024-12-17", "gpt-4o-audio-preview-2025-06-03",
 	"gpt-4o-realtime-preview", "gpt-4o-realtime-preview-2024-10-01", "gpt-4o-realtime-preview-2024-12-17", "gpt-4o-realtime-preview-2025-06-03",
 	"gpt-4o-mini-realtime-preview", "gpt-4o-mini-realtime-preview-2024-12-17",

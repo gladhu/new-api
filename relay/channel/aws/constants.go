@@ -29,6 +29,20 @@ var awsModelIDMap = map[string]string{
 	"nova-reel-v1:0":    "amazon.nova-reel-v1:0",
 	"nova-reel-v1:1":    "amazon.nova-reel-v1:1",
 	"nova-sonic-v1:0":   "amazon.nova-sonic-v1:0",
+	// OpenAI models on Bedrock (Responses API via bedrock-mantle)
+	"gpt-5.4":        "openai.gpt-5.4",
+	"gpt-5.5":        "openai.gpt-5.5",
+	"gpt-5.6":        "openai.gpt-5.6",
+	"openai.gpt-5.4": "openai.gpt-5.4",
+	"openai.gpt-5.5": "openai.gpt-5.5",
+	"openai.gpt-5.6": "openai.gpt-5.6",
+}
+
+// BedrockOpenAIModels lists friendly model names for OpenAI frontier models on AWS Bedrock.
+var BedrockOpenAIModels = []string{
+	"gpt-5.4",
+	"gpt-5.5",
+	"gpt-5.6",
 }
 
 var awsModelCanCrossRegionMap = map[string]map[string]bool{
