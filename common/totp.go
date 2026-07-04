@@ -3,6 +3,7 @@ package common
 import (
 	"crypto/rand"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -142,10 +143,19 @@ func ValidateNumericCode(code string) (string, error) {
 	return code, nil
 }
 
-// GenerateQRCodeData 生成二维码数据
+// GenerateQRCodeData 生成二维码数据（otpauth URL）
 func GenerateQRCodeData(secret, username string) string {
 	issuer := Get2FAIssuer()
-	accountName := fmt.Sprintf("%s (%s)", username, issuer)
-	return fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&digits=6&period=30",
-		issuer, accountName, secret, issuer)
+	values := url.Values{}
+	values.Set("secret", secret)
+	values.Set("issuer", issuer)
+	values.Set("digits", "6")
+	values.Set("period", "30")
+	label := url.PathEscape(issuer + ":" + username)
+	return (&url.URL{
+		Scheme:   "otpauth",
+		Host:     "totp",
+		Path:     "/" + label,
+		RawQuery: values.Encode(),
+	}).String()
 }

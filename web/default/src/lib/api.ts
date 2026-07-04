@@ -245,7 +245,7 @@ export async function setup2FA() {
 export async function enable2FA(code: string, deviceId?: number) {
   const res = await api.post('/api/user/2fa/enable', {
     code,
-    device_id: deviceId,
+    device_id: deviceId ?? 0,
   })
   return res.data
 }

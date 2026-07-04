@@ -122,7 +122,7 @@ func Setup2FA(c *gin.Context) {
 		}
 	}
 
-	qrCodeData := common.GenerateQRCodeData(key.Secret(), accountName)
+	qrCodeData := key.URL()
 
 	var responseDeviceID int
 	if isAdditional {

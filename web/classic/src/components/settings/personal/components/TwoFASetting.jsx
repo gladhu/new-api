@@ -125,7 +125,7 @@ const TwoFASetting = ({ t }) => {
       showWarning(t('请输入验证码'));
       return;
     }
-    if (!setupData?.device_id) {
+    if (setupData?.device_id == null) {
       showError(t('设置2FA失败'));
       return;
     }
