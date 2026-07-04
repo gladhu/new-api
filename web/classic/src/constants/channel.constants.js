@@ -43,7 +43,7 @@ export const CHANNEL_OPTIONS = [
   {
     value: 33,
     color: 'indigo',
-    label: 'AWS Claude',
+    label: 'AWS Claude/GPT',
   },
   { value: 41, color: 'blue', label: 'Vertex AI' },
   {

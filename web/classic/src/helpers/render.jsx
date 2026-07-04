@@ -344,7 +344,7 @@ export function getChannelIcon(channelType) {
     case 4: // Ollama
       return <Ollama size={iconSize} />;
     case 14: // Anthropic Claude
-    case 33: // AWS Claude
+    case 33: // AWS Claude/GPT
       return <Claude.Color size={iconSize} />;
     case 41: // Vertex AI
       return <Gemini.Color size={iconSize} />;
