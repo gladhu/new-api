@@ -88,7 +88,7 @@ const ClaudeCodePage = () => {
             </>,
             <>
               <DocInlineCode>CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS</DocInlineCode> —{' '}
-              {t('(可选)Disables experimental beta headers for third-party gateways')}
+              {t('(必需)Disables experimental beta headers for third-party gateways')}
             </>,
             <>
               <DocInlineCode>CLAUDE_CODE_ATTRIBUTION_HEADER</DocInlineCode> —{' '}
