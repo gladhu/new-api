@@ -78,12 +78,15 @@ export const ThemeProvider = ({ children }) => {
   // 应用主题到DOM
   useEffect(() => {
     const body = document.body;
+    const root = document.documentElement;
     if (actualTheme === 'dark') {
       body.setAttribute('theme-mode', 'dark');
-      document.documentElement.classList.add('dark');
+      root.classList.add('dark');
+      root.classList.remove('light');
     } else {
       body.removeAttribute('theme-mode');
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
+      root.classList.add('light');
     }
   }, [actualTheme]);
 

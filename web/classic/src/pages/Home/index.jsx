@@ -144,6 +144,17 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
+    if (!homePageContent.startsWith('https://')) return;
+    const iframe = document.querySelector('iframe');
+    if (!iframe?.contentWindow) return;
+    try {
+      iframe.contentWindow.postMessage({ themeMode: actualTheme }, '*');
+    } catch (e) {
+      // Silently ignore cross-origin or access errors
+    }
+  }, [actualTheme, homePageContent]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setEndpointIndex((prev) => (prev + 1) % endpointItems.length);
     }, 3000);

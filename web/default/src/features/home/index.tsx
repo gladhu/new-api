@@ -16,16 +16,45 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
 import { Footer } from '@/components/layout/components/footer'
 import { RichContent } from '@/components/rich-content'
+import { useTheme } from '@/context/theme-provider'
 import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { CTA, Features, Hero, HowItWorks, Stats } from './components'
 import { useHomePageContent } from './hooks'
+
+function CustomHomeIframe(props: { src: string; title: string }) {
+  const { resolvedTheme } = useTheme()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  const postTheme = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { themeMode: resolvedTheme },
+      '*'
+    )
+  }, [resolvedTheme])
+
+  useEffect(() => {
+    postTheme()
+  }, [postTheme])
+
+  return (
+    <iframe
+      ref={iframeRef}
+      src={props.src}
+      className='h-screen w-full border-none'
+      title={props.title}
+      sandbox='allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts'
+      onLoad={postTheme}
+    />
+  )
+}
 
 export function Home() {
   const { t } = useTranslation()
@@ -47,12 +76,7 @@ export function Home() {
     if (isUrl) {
       return (
         <PublicLayout showMainContainer={false}>
-          <iframe
-            src={content}
-            className='h-screen w-full border-none'
-            title={t('Custom Home Page')}
-            sandbox='allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts'
-          />
+          <CustomHomeIframe src={content} title={t('Custom Home Page')} />
         </PublicLayout>
       )
     }

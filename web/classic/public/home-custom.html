@@ -1,7 +1,44 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      ;(function () {
+        var root = document.documentElement
+        function applyTheme(t) {
+          if (t !== 'light' && t !== 'dark') return
+          root.classList.remove('light', 'dark')
+          root.classList.add(t)
+        }
+        if (window.self !== window.top) {
+          try {
+            var pel = window.parent.document.documentElement
+            if (pel.classList.contains('dark')) {
+              applyTheme('dark')
+              return
+            }
+            if (pel.classList.contains('light')) {
+              applyTheme('light')
+              return
+            }
+            var b = window.parent.document.body
+            if (b && b.getAttribute('theme-mode') === 'dark') {
+              applyTheme('dark')
+              return
+            }
+            applyTheme('light')
+            return
+          } catch (e) {
+            /* 跨域或 sandbox 限制时回退到系统偏好 */
+          }
+        }
+        applyTheme(
+          window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+        )
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -855,6 +892,8 @@
               var tm = b.getAttribute('theme-mode')
               if (tm === 'dark' || tm === 'light') return tm
             }
+            // Classic 浅色：无 dark 类且无 theme-mode 时视为浅色
+            return 'light'
           } catch (err) {
             /* 跨域或非同源部署则忽略 */
           }
