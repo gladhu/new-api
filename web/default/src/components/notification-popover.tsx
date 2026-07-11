@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
+import { lazy, Suspense } from 'react'
 import { Bell, Megaphone } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { RichContent } from '@/components/rich-content'
 import { getAnnouncementColorClass } from '@/lib/colors'
 import { formatDateTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -41,7 +41,35 @@ import {
 } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+const LazyRichContent = lazy(() =>
+  import('@/components/rich-content').then((m) => ({ default: m.RichContent }))
+)
+
+function RichContentLoader(props: {
+  content: string
+  breaks?: boolean
+  enabled: boolean
+}) {
+  if (!props.enabled || !props.content) {
+    return null
+  }
+
+  return (
+    <Suspense
+      fallback={
+        <div className='space-y-2'>
+          <Skeleton className='h-4 w-full' />
+          <Skeleton className='h-4 w-5/6' />
+        </div>
+      }
+    >
+      <LazyRichContent breaks={props.breaks} content={props.content} />
+    </Suspense>
+  )
+}
 
 interface AnnouncementItem {
   id?: number | string
@@ -180,10 +208,12 @@ function EmptyState({
 function NoticeContent({
   notice,
   loading,
+  enabled,
   t,
 }: {
   notice: string
   loading: boolean
+  enabled: boolean
   t: TFunction
 }) {
   if (loading) {
@@ -204,7 +234,7 @@ function NoticeContent({
 
   return (
     <ScrollArea className='h-[min(52vh,28rem)] pr-3'>
-      <RichContent breaks content={notice} />
+      <RichContentLoader breaks enabled={enabled} content={notice} />
     </ScrollArea>
   )
 }
@@ -215,10 +245,12 @@ function NoticeContent({
 function AnnouncementsContent({
   announcements,
   loading,
+  enabled,
   t,
 }: {
   announcements: AnnouncementItem[]
   loading: boolean
+  enabled: boolean
   t: TFunction
 }) {
   if (loading) {
@@ -259,12 +291,20 @@ function AnnouncementsContent({
                   <AnnouncementDot type={item.type} />
                   <div className='flex min-w-0 flex-1 flex-col gap-2'>
                     <div className='text-sm'>
-                      <RichContent breaks content={item.content || ''} />
+                      <RichContentLoader
+                        breaks
+                        enabled={enabled}
+                        content={item.content || ''}
+                      />
                     </div>
 
                     {item.extra ? (
                       <div className='text-muted-foreground text-xs'>
-                        <RichContent breaks content={item.extra} />
+                        <RichContentLoader
+                          breaks
+                          enabled={enabled}
+                          content={item.extra}
+                        />
                       </div>
                     ) : null}
 
@@ -352,13 +392,19 @@ export function NotificationPopover({
           </TabsList>
 
           <TabsContent value='notice' className='mt-2'>
-            <NoticeContent notice={notice} loading={loading} t={t} />
+            <NoticeContent
+              notice={notice}
+              loading={loading}
+              enabled={open}
+              t={t}
+            />
           </TabsContent>
 
           <TabsContent value='announcements' className='mt-2'>
             <AnnouncementsContent
               announcements={announcements}
               loading={loading}
+              enabled={open}
               t={t}
             />
           </TabsContent>

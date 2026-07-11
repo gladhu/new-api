@@ -49,6 +49,27 @@ export default defineConfig(({ envMode }) => {
           priority: 0,
           enforce: true,
         },
+        'vendor-katex': {
+          test: /node_modules[\\/]katex[\\/]/,
+          name: 'vendor-katex',
+          chunks: 'async',
+          priority: 20,
+          enforce: true,
+        },
+        'vendor-marked': {
+          test: /node_modules[\\/]marked[\\/]/,
+          name: 'vendor-marked',
+          chunks: 'async',
+          priority: 20,
+          enforce: true,
+        },
+        'vendor-motion': {
+          test: /node_modules[\\/]motion[\\/]/,
+          name: 'vendor-motion',
+          chunks: 'async',
+          priority: 20,
+          enforce: true,
+        },
       },
     },
     source: {

@@ -17,7 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { HtmlContent } from '@/components/html-content'
-import { Markdown } from '@/components/ui/markdown'
+import { lazy, Suspense } from 'react'
+import { Skeleton } from '@/components/ui/skeleton'
+
+const Markdown = lazy(() =>
+  import('@/components/ui/markdown').then((m) => ({ default: m.Markdown }))
+)
 
 type RichContentMode = 'markdown' | 'html'
 
@@ -28,14 +33,26 @@ interface RichContentProps {
   className?: string
 }
 
+function MarkdownFallback(props: { className?: string }) {
+  return (
+    <div className={props.className}>
+      <Skeleton className='mb-3 h-4 w-full' />
+      <Skeleton className='mb-3 h-4 w-5/6' />
+      <Skeleton className='h-4 w-2/3' />
+    </div>
+  )
+}
+
 export function RichContent(props: RichContentProps) {
   if (props.mode === 'html') {
     return <HtmlContent content={props.content} className={props.className} />
   }
 
   return (
-    <Markdown breaks={props.breaks} className={props.className}>
-      {props.content}
-    </Markdown>
+    <Suspense fallback={<MarkdownFallback className={props.className} />}>
+      <Markdown breaks={props.breaks} className={props.className}>
+        {props.content}
+      </Markdown>
+    </Suspense>
   )
 }

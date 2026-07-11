@@ -20,7 +20,6 @@ import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
-import { RichContent } from '@/components/rich-content'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -30,6 +29,12 @@ import { useHomePageContent } from './hooks'
 const DefaultHomeContent = lazy(
   () => import('./components/default-home-content').then((m) => ({
     default: m.DefaultHomeContent,
+  }))
+)
+
+const MarkdownHomeContent = lazy(() =>
+  import('./components/markdown-home-content').then((m) => ({
+    default: m.MarkdownHomeContent,
   }))
 )
 
@@ -50,15 +55,15 @@ export function Home() {
   const isAuthenticated = !!auth.user
   const { content, mode, isRefreshing } = useHomePageContent()
 
-  if (mode === 'inline-html') {
-    if (!content) {
-      return (
-        <PublicLayout showMainContainer={false}>
-          <HomeContentSkeleton />
-        </PublicLayout>
-      )
-    }
+  if (mode === 'pending' || (mode === 'inline-html' && !content)) {
+    return (
+      <PublicLayout showMainContainer={false}>
+        <HomeContentSkeleton />
+      </PublicLayout>
+    )
+  }
 
+  if (mode === 'inline-html') {
     return (
       <PublicLayout showMainContainer={false}>
         <CustomHomeInline html={content} />
@@ -74,9 +79,9 @@ export function Home() {
   if (mode === 'markdown' && content) {
     return (
       <PublicLayout>
-        <div className='mx-auto max-w-6xl px-4 py-8'>
-          <RichContent mode='markdown' content={content} className='custom-home-content' />
-        </div>
+        <Suspense fallback={<HomeContentSkeleton />}>
+          <MarkdownHomeContent content={content} />
+        </Suspense>
       </PublicLayout>
     )
   }

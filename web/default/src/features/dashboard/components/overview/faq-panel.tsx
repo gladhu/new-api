@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { lazy, Suspense } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -24,11 +25,23 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { Markdown } from '@/components/ui/markdown'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useFAQ } from '@/features/dashboard/hooks/use-status-data'
 import type { FAQItem } from '@/features/dashboard/types'
 import { PanelWrapper } from '../ui/panel-wrapper'
+
+const Markdown = lazy(() =>
+  import('@/components/ui/markdown').then((m) => ({ default: m.Markdown }))
+)
+
+function FaqMarkdown(props: { className?: string; children: string }) {
+  return (
+    <Suspense fallback={<Skeleton className='h-4 w-full' />}>
+      <Markdown className={props.className}>{props.children}</Markdown>
+    </Suspense>
+  )
+}
 
 export function FAQPanel() {
   const { t } = useTranslation()
@@ -61,14 +74,14 @@ export function FAQPanel() {
                 className='border-border/60'
               >
                 <AccordionTrigger className='text-start hover:no-underline'>
-                  <Markdown className='text-sm leading-relaxed font-semibold'>
+                  <FaqMarkdown className='text-sm leading-relaxed font-semibold'>
                     {item.question}
-                  </Markdown>
+                  </FaqMarkdown>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <Markdown className='text-muted-foreground/60 text-sm'>
+                  <FaqMarkdown className='text-muted-foreground/60 text-sm'>
                     {item.answer}
-                  </Markdown>
+                  </FaqMarkdown>
                 </AccordionContent>
               </AccordionItem>
             )

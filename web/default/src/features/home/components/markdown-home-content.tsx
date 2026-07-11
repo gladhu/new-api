@@ -16,18 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export type HomeContentMode = 'default' | 'inline-html' | 'markdown' | 'pending'
+import { RichContent } from '@/components/rich-content'
 
-export interface HomePageContentResponse {
-  success: boolean
-  message?: string
-  data?: string
+interface MarkdownHomeContentProps {
+  content: string
 }
 
-export interface HomePageContentResult {
-  /** Resolved content string for the active mode. */
-  content: string
-  mode: HomeContentMode
-  /** True while refreshing custom content from the API in the background. */
-  isRefreshing: boolean
+export function MarkdownHomeContent(props: MarkdownHomeContentProps) {
+  return (
+    <div className='mx-auto max-w-6xl px-4 py-8'>
+      <RichContent
+        mode='markdown'
+        content={props.content}
+        className='custom-home-content'
+      />
+    </div>
+  )
 }

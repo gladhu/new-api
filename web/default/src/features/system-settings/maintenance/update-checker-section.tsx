@@ -16,15 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { ExternalLinkIcon, RefreshCcwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatTimestamp, formatTimestampToDate } from '@/lib/format'
 import { Button } from '@/components/ui/button'
-import { Markdown } from '@/components/ui/markdown'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/dialog'
 import { SettingsSection } from '../components/settings-section'
+
+const Markdown = lazy(() =>
+  import('@/components/ui/markdown').then((m) => ({ default: m.Markdown }))
+)
 
 type ReleaseInfo = {
   tag_name: string
@@ -174,7 +178,9 @@ export function UpdateCheckerSection({
       >
         <div className='space-y-4'>
           {release?.body ? (
-            <Markdown>{release.body}</Markdown>
+            <Suspense fallback={<Skeleton className='h-24 w-full' />}>
+              <Markdown>{release.body}</Markdown>
+            </Suspense>
           ) : (
             <p className='text-muted-foreground text-sm'>
               {t('No release notes provided.')}

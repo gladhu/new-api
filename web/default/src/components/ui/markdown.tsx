@@ -18,10 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import DOMPurify from 'dompurify'
 import * as katex from 'katex'
-import 'katex/dist/katex.min.css'
 import { Marked, Renderer, type MarkedExtension, type Tokens } from 'marked'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
+
+let katexCssLoaded = false
 
 interface MarkdownProps {
   breaks?: boolean
@@ -706,6 +707,12 @@ function renderMarkdown(markdown: string, breaks = false): string {
 }
 
 export function Markdown(props: MarkdownProps) {
+  useEffect(() => {
+    if (katexCssLoaded) return
+    katexCssLoaded = true
+    void import('katex/dist/katex.min.css')
+  }, [])
+
   const html = useMemo(
     () => renderMarkdown(props.children, props.breaks),
     [props.breaks, props.children]

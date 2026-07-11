@@ -78,6 +78,7 @@ async function resolveSourceToHomeContent(source: string): Promise<{
 
   if (isLikelyHtml(trimmed)) {
     const html = await resolveHomeContentToInlineHtml(trimmed)
+    if (!html) return null
     return { content: html, mode: 'inline-html' }
   }
 
@@ -97,7 +98,7 @@ function getInitialHomeState(): { content: string; mode: HomeContentMode } {
     /* empty */
   }
 
-  return { content: '', mode: 'default' }
+  return { content: '', mode: 'pending' }
 }
 
 /**
@@ -109,7 +110,9 @@ export function useHomePageContent(): HomePageContentResult {
   const [content, setContent] = useState(initial.content)
   const [mode, setMode] = useState<HomeContentMode>(initial.mode)
   const [isRefreshing, setIsRefreshing] = useState(
-    () => initial.mode === 'inline-html' && !initial.content
+    () =>
+      initial.mode === 'pending' ||
+      (initial.mode === 'inline-html' && !initial.content)
   )
 
   useEffect(() => {
