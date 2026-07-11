@@ -1,9 +1,14 @@
 package middleware
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -103,4 +108,47 @@ func TestCompressSkipsAlreadyCompressedContentType(t *testing.T) {
 
 	require.Equal(t, 200, rec.Code)
 	assert.Empty(t, rec.Header().Get("Content-Encoding"))
+}
+
+func TestCompressPreservesLargeJSONBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	want := strings.Repeat(`{"id":1,"name":"user","email":"test@example.com"},`, 200)
+	router := gin.New()
+	router.Use(Compress())
+	router.GET("/users", func(c *gin.Context) {
+		c.Data(200, "application/json; charset=utf-8", []byte("["+want+"]"))
+	})
+
+	for _, encoding := range []string{"br", "gzip"} {
+		t.Run(encoding, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/users", nil)
+			req.Header.Set("Accept-Encoding", encoding)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, 200, rec.Code)
+			assert.Equal(t, encoding, rec.Header().Get("Content-Encoding"))
+
+			body, err := decompressBody(encoding, rec.Body.Bytes())
+			require.NoError(t, err)
+			assert.Equal(t, "["+want+"]", string(body))
+		})
+	}
+}
+
+func decompressBody(encoding string, data []byte) ([]byte, error) {
+	switch encoding {
+	case "br":
+		return io.ReadAll(brotli.NewReader(bytes.NewReader(data)))
+	case "gzip":
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		return io.ReadAll(reader)
+	default:
+		return data, nil
+	}
 }

@@ -169,6 +169,8 @@ func (w *compressResponseWriter) Write(data []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 
+	n := len(data)
+
 	if w.writer != nil {
 		return w.writer.Write(data)
 	}
@@ -178,16 +180,14 @@ func (w *compressResponseWriter) Write(data []byte) (int, error) {
 
 	w.buf.Write(data)
 	if w.buf.Len() < w.minLength {
-		return len(data), nil
+		return n, nil
 	}
 
 	if err := w.startCompression(); err != nil {
 		return 0, err
 	}
-	if w.writer != nil {
-		return w.writer.Write(data)
-	}
-	return w.ResponseWriter.Write(data)
+	// startCompression already flushed buf (including this write); do not write data again.
+	return n, nil
 }
 
 func (w *compressResponseWriter) startCompression() error {
