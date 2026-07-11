@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type RefObject, useEffect } from 'react'
+import { getCachedStatus } from '@/hooks/use-status'
 
 const API_ENDPOINTS = [
   '/v1/chat/completions',
@@ -32,7 +33,8 @@ const API_ENDPOINTS = [
 ]
 
 export function useCustomHomeInteractions(
-  containerRef: RefObject<HTMLElement | null>
+  containerRef: RefObject<HTMLElement | null>,
+  serverAddress?: string | null
 ) {
   useEffect(() => {
     const root = containerRef.current
@@ -61,21 +63,6 @@ export function useCustomHomeInteractions(
         addr && String(addr).trim()
           ? String(addr).trim().replace(/\/$/, '')
           : defaultServerAddress()
-    }
-
-    const loadServerAddress = () => {
-      fetch('/api/status')
-        .then((res) => res.json())
-        .then((body) => {
-          if (body?.success && body.data?.server_address) {
-            setServerAddress(body.data.server_address as string)
-          } else {
-            setServerAddress('')
-          }
-        })
-        .catch(() => {
-          setServerAddress('')
-        })
     }
 
     const rotateEndpoint = () => {
@@ -125,8 +112,11 @@ export function useCustomHomeInteractions(
     }
 
     if (apiUrlInput) {
-      setServerAddress('')
-      loadServerAddress()
+      const cachedAddress = getCachedStatus()?.server_address
+      const resolvedAddress =
+        serverAddress ??
+        (typeof cachedAddress === 'string' ? cachedAddress : undefined)
+      setServerAddress(resolvedAddress)
     }
     if (apiEndpointEl && API_ENDPOINTS.length > 0) {
       apiEndpointEl.textContent = API_ENDPOINTS[0]
@@ -139,5 +129,5 @@ export function useCustomHomeInteractions(
       if (rotateTimer) clearInterval(rotateTimer)
       apiCopyBtn?.removeEventListener('click', copyServerAddress)
     }
-  }, [containerRef])
+  }, [containerRef, serverAddress])
 }

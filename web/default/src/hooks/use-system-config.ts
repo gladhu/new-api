@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useCallback } from 'react'
+import { useEffect } from 'react'
 import {
   useSystemConfigStore,
   type CurrencyConfig,
@@ -26,11 +26,6 @@ import {
 } from '@/stores/system-config-store'
 import { DEFAULT_SYSTEM_NAME, DEFAULT_LOGO } from '@/lib/constants'
 import { applyFaviconToDom } from '@/lib/dom-utils'
-
-interface UseSystemConfigOptions {
-  /** Automatically fetch config from backend (use only in root component) */
-  autoLoad?: boolean
-}
 
 interface StatusApiResponse {
   success: boolean
@@ -101,17 +96,6 @@ export function mapStatusDataToConfig(
   }
 }
 
-// Fetch system config from API
-async function fetchSystemConfig(): Promise<Partial<SystemConfig>> {
-  const response = await fetch('/api/status')
-  if (!response.ok) throw new Error('Failed to fetch status')
-
-  const data: StatusApiResponse = await response.json()
-  if (!data.success) throw new Error('API returned error')
-
-  return mapStatusDataToConfig(data.data)
-}
-
 // Preload image and return cleanup function
 function preloadImage(
   src: string,
@@ -130,44 +114,12 @@ function preloadImage(
 }
 
 /**
- * System configuration hook with auto-loading and logo preloading
- *
- * @example
- * // Root component - auto-load from backend
- * useSystemConfig({ autoLoad: true })
- *
- * @example
- * // Other components - use cached config
- * const { systemName, logo, loading } = useSystemConfig()
+ * System configuration hook backed by useStatus / system-config-store.
+ * Reads persisted config and preloads the logo image when the URL changes.
  */
-export function useSystemConfig(options: UseSystemConfigOptions = {}) {
-  const { autoLoad = false } = options
-  const {
-    config,
-    loading,
-    loadedLogoUrl,
-    setConfig,
-    setLoadedLogoUrl,
-    setLoading,
-  } = useSystemConfigStore()
-
-  // Load config from backend
-  const loadConfig = useCallback(async () => {
-    try {
-      setLoading(true)
-      const newConfig = await fetchSystemConfig()
-      setConfig(newConfig)
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load system config:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [setConfig, setLoading])
-
-  useEffect(() => {
-    if (autoLoad) loadConfig()
-  }, [autoLoad, loadConfig])
+export function useSystemConfig() {
+  const { config, loading, loadedLogoUrl, setLoadedLogoUrl } =
+    useSystemConfigStore()
 
   // Preload logo image when URL changes
   useEffect(() => {

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import DOMPurify from 'dompurify'
 import { useMemo, useRef } from 'react'
 
+import { useStatus } from '@/hooks/use-status'
 import { cn } from '@/lib/utils'
 
 import { useCustomHomeInteractions } from '../hooks/use-custom-home-interactions'
@@ -38,7 +39,11 @@ function splitCustomHomeHtml(html: string): { styles: string; body: string } {
 
 export function CustomHomeInline(props: CustomHomeInlineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  useCustomHomeInteractions(containerRef)
+  const { status } = useStatus()
+  useCustomHomeInteractions(
+    containerRef,
+    status?.server_address as string | undefined
+  )
 
   const { styles, body } = useMemo(
     () => splitCustomHomeHtml(props.html),

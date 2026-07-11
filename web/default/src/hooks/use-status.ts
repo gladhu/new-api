@@ -16,9 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 import { getStatus } from '@/lib/api'
+import { applyFaviconToDom } from '@/lib/dom-utils'
 import type { SystemStatus } from '@/features/auth/types'
 import { mapStatusDataToConfig } from './use-system-config'
 
@@ -35,34 +37,83 @@ function getInitialStatus(): SystemStatus | undefined {
   return undefined
 }
 
+export function getCachedStatus(): Record<string, unknown> | null {
+  const cached = getInitialStatus()
+  return cached ? (cached as Record<string, unknown>) : null
+}
+
+export function applyStatusBranding(
+  status: Record<string, unknown> | null | undefined
+): void {
+  if (!status || typeof document === 'undefined') return
+
+  const systemName = status.system_name
+  if (typeof systemName === 'string' && systemName) {
+    document.title = systemName
+    const metaTitle = document.querySelector(
+      'meta[name="title"]'
+    ) as HTMLMetaElement | null
+    if (metaTitle) metaTitle.setAttribute('content', systemName)
+  }
+
+  const logo = status.logo
+  if (typeof logo === 'string' && logo) {
+    applyFaviconToDom(logo)
+  }
+}
+
+function syncStatusResponse(status: Record<string, unknown> | null): void {
+  if (!status) return
+
+  try {
+    const { setConfig } = useSystemConfigStore.getState()
+    setConfig(mapStatusDataToConfig(status))
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn('[useStatus] Failed to sync status to system config', err)
+    }
+  }
+
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('status', JSON.stringify(status))
+    }
+  } catch {
+    /* empty */
+  }
+
+  applyStatusBranding(status)
+}
+
+let cachedStatusSynced = false
+
+function syncCachedStatusOnce(): void {
+  if (cachedStatusSynced) return
+  cachedStatusSynced = true
+
+  const cached = getCachedStatus()
+  if (cached) {
+    syncStatusResponse(cached)
+    useSystemConfigStore.getState().setLoading(false)
+  }
+}
+
 export function useStatus() {
+  useEffect(() => {
+    syncCachedStatusOnce()
+  }, [])
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['status'],
     queryFn: async () => {
-      const status = await getStatus()
       try {
-        if (status) {
-          const { setConfig } = useSystemConfigStore.getState()
-          setConfig(mapStatusDataToConfig(status))
-        }
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[useStatus] Failed to sync status to system config',
-            err
-          )
-        }
+        const status = await getStatus()
+        syncStatusResponse(status)
+        return status as SystemStatus | null
+      } finally {
+        useSystemConfigStore.getState().setLoading(false)
       }
-      // Save to localStorage
-      try {
-        if (typeof window !== 'undefined' && status) {
-          window.localStorage.setItem('status', JSON.stringify(status))
-        }
-      } catch {
-        /* empty */
-      }
-      return status as SystemStatus | null
     },
     // Use localStorage data as initial data
     placeholderData: getInitialStatus(),
