@@ -16,18 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export type HomeContentMode = 'default' | 'inline-html' | 'markdown'
+import { Footer } from '@/components/layout/components/footer'
 
-export interface HomePageContentResponse {
-  success: boolean
-  message?: string
-  data?: string
+import { CTA, Features, Hero, HowItWorks, Stats } from './index'
+
+interface DefaultHomeContentProps {
+  isAuthenticated: boolean
 }
 
-export interface HomePageContentResult {
-  /** Resolved content string for the active mode. */
-  content: string
-  mode: HomeContentMode
-  /** True while refreshing custom content from the API in the background. */
-  isRefreshing: boolean
+export function DefaultHomeContent(props: DefaultHomeContentProps) {
+  return (
+    <>
+      <Hero isAuthenticated={props.isAuthenticated} />
+      <Stats />
+      <Features />
+      <HowItWorks />
+      <CTA isAuthenticated={props.isAuthenticated} />
+      <Footer />
+    </>
+  )
 }

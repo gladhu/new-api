@@ -19,12 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import type { SetupFormValues, SetupResponse } from './types'
 
-export async function getSetupStatus(): Promise<SetupResponse> {
+export async function getSetupStatus(options?: {
+  fresh?: boolean
+}): Promise<SetupResponse> {
   const res = await api.get('/api/setup', {
-    // We want fresh status on every visit.
-    params: {
-      t: Date.now(),
-    },
+    params: options?.fresh ? { t: Date.now() } : undefined,
   })
   return res.data
 }

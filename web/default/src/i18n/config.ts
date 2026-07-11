@@ -19,28 +19,25 @@ For commercial licensing, please contact support@quantumnous.com
 import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
-import zh from './locales/zh.json'
 import {
   applyStoredInterfaceLanguage,
   DEFAULT_INTERFACE_LANGUAGE,
 } from './load-locale'
 
-i18n
+void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources: {
-      zh,
-    },
+    resources: {},
     lng: DEFAULT_INTERFACE_LANGUAGE,
     fallbackLng: [DEFAULT_INTERFACE_LANGUAGE],
     supportedLngs: ['en', 'zh', 'fr', 'ru', 'ja', 'vi'],
     partialBundledLanguages: true,
-    load: 'languageOnly', // Convert zh-CN -> zh
-    nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
+    load: 'languageOnly',
+    nsSeparator: false,
     debug: import.meta.env.DEV,
     interpolation: {
-      escapeValue: false, // not needed for react as it escapes by default
+      escapeValue: false,
     },
     detection: {
       order: ['localStorage', 'navigator'],
@@ -48,6 +45,8 @@ i18n
     },
   })
 
-void applyStoredInterfaceLanguage()
+export async function bootstrapI18n(): Promise<void> {
+  await applyStoredInterfaceLanguage()
+}
 
 export default i18n

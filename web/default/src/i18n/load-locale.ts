@@ -27,6 +27,7 @@ const localeLoaders: Record<
   string,
   () => Promise<{ default: LocaleModule }>
 > = {
+  zh: () => import('./locales/zh.json'),
   en: () => import('./locales/en.json'),
   fr: () => import('./locales/fr.json'),
   ja: () => import('./locales/ja.json'),
@@ -38,7 +39,6 @@ export const DEFAULT_INTERFACE_LANGUAGE = 'zh'
 
 export async function ensureLanguageLoaded(language: string): Promise<void> {
   const code = normalizeInterfaceLanguage(language)
-  if (code === DEFAULT_INTERFACE_LANGUAGE) return
   if (i18n.hasResourceBundle(code, 'translation')) return
 
   const loader = localeLoaders[code]
@@ -64,6 +64,8 @@ export async function applyStoredInterfaceLanguage(): Promise<void> {
   const code = normalizeInterfaceLanguage(
     i18n.resolvedLanguage || i18n.language
   )
-  if (code === DEFAULT_INTERFACE_LANGUAGE) return
-  await changeAppLanguage(code)
+  await ensureLanguageLoaded(code)
+  if (code !== i18n.language) {
+    await i18n.changeLanguage(code)
+  }
 }

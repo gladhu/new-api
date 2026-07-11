@@ -2,43 +2,6 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      ;(function () {
-        var root = document.documentElement
-        function applyTheme(t) {
-          if (t !== 'light' && t !== 'dark') return
-          root.classList.remove('light', 'dark')
-          root.classList.add(t)
-        }
-        if (window.self !== window.top) {
-          try {
-            var pel = window.parent.document.documentElement
-            if (pel.classList.contains('dark')) {
-              applyTheme('dark')
-              return
-            }
-            if (pel.classList.contains('light')) {
-              applyTheme('light')
-              return
-            }
-            var b = window.parent.document.body
-            if (b && b.getAttribute('theme-mode') === 'dark') {
-              applyTheme('dark')
-              return
-            }
-            applyTheme('light')
-            return
-          } catch (e) {
-            /* 跨域或 sandbox 限制时回退到系统偏好 */
-          }
-        }
-        applyTheme(
-          window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light'
-        )
-      })()
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -712,21 +675,6 @@
     </style>
   </head>
   <body>
-    <header>
-      <div class="wrap nav">
-        <a class="brand" href="/" target="_top">
-          <img src="/logo.png" alt="" width="32" height="32" />
-          <span>New API</span>
-        </a>
-        <nav class="nav-links" aria-label="主导航">
-          <a href="/pricing" target="_top">定价</a>
-          <a href="/about" target="_top">关于</a>
-          <a class="btn btn-ghost" href="/login" target="_top">登录</a>
-          <a class="btn btn-primary" href="/register" target="_top">立即注册</a>
-        </nav>
-      </div>
-    </header>
-
     <main>
       <section class="hero">
         <div class="wrap hero-inner">

@@ -16,43 +16,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useRef } from 'react'
+import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { RichContent } from '@/components/rich-content'
-import { useTheme } from '@/context/theme-provider'
-import { isLikelyHtml } from '@/lib/content-format'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CTA, Features, Hero, HowItWorks, Stats } from './components'
+import { CustomHomeInline } from './components/custom-home-inline'
 import { useHomePageContent } from './hooks'
 
-function CustomHomeIframe(props: { src: string; title: string }) {
-  const { resolvedTheme } = useTheme()
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+const DefaultHomeContent = lazy(
+  () => import('./components/default-home-content').then((m) => ({
+    default: m.DefaultHomeContent,
+  }))
+)
 
-  const postTheme = useCallback(() => {
-    iframeRef.current?.contentWindow?.postMessage(
-      { themeMode: resolvedTheme },
-      '*'
-    )
-  }, [resolvedTheme])
-
-  useEffect(() => {
-    postTheme()
-  }, [postTheme])
-
+function HomeContentSkeleton() {
   return (
-    <iframe
-      ref={iframeRef}
-      src={props.src}
-      className='h-screen w-full border-none'
-      title={props.title}
-      sandbox='allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts'
-      onLoad={postTheme}
-    />
+    <main className='mx-auto flex min-h-[60vh] max-w-6xl flex-col gap-4 px-4 pt-24 pb-16'>
+      <Skeleton className='h-8 w-48' />
+      <Skeleton className='h-12 w-full max-w-2xl' />
+      <Skeleton className='h-24 w-full max-w-xl' />
+      <Skeleton className='mt-4 h-40 w-full' />
+    </main>
   )
 }
 
@@ -60,35 +48,34 @@ export function Home() {
   const { t } = useTranslation()
   const { auth } = useAuthStore()
   const isAuthenticated = !!auth.user
-  const { content, isLoaded, isUrl } = useHomePageContent()
+  const { content, mode, isRefreshing } = useHomePageContent()
 
-  if (!isLoaded) {
-    return (
-      <PublicLayout showMainContainer={false}>
-        <main className='flex min-h-screen items-center justify-center'>
-          <div className='text-muted-foreground'>{t('Loading...')}</div>
-        </main>
-      </PublicLayout>
-    )
-  }
-
-  if (content) {
-    if (isUrl) {
+  if (mode === 'inline-html') {
+    if (!content) {
       return (
         <PublicLayout showMainContainer={false}>
-          <CustomHomeIframe src={content} title={t('Custom Home Page')} />
+          <HomeContentSkeleton />
         </PublicLayout>
       )
     }
 
     return (
+      <PublicLayout showMainContainer={false}>
+        <CustomHomeInline html={content} />
+        {isRefreshing ? (
+          <span className='sr-only' aria-live='polite'>
+            {t('Loading...')}
+          </span>
+        ) : null}
+      </PublicLayout>
+    )
+  }
+
+  if (mode === 'markdown' && content) {
+    return (
       <PublicLayout>
         <div className='mx-auto max-w-6xl px-4 py-8'>
-          <RichContent
-            mode={isLikelyHtml(content) ? 'html' : 'markdown'}
-            content={content}
-            className='custom-home-content'
-          />
+          <RichContent mode='markdown' content={content} className='custom-home-content' />
         </div>
       </PublicLayout>
     )
@@ -96,12 +83,9 @@ export function Home() {
 
   return (
     <PublicLayout showMainContainer={false}>
-      <Hero isAuthenticated={isAuthenticated} />
-      <Stats />
-      <Features />
-      <HowItWorks />
-      <CTA isAuthenticated={isAuthenticated} />
-      <Footer />
+      <Suspense fallback={<HomeContentSkeleton />}>
+        <DefaultHomeContent isAuthenticated={isAuthenticated} />
+      </Suspense>
     </PublicLayout>
   )
 }
