@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate } from '@tanstack/react-router'
 import i18n from 'i18next'
+import { changeAppLanguage } from '@/i18n/load-locale'
 import { useAuthStore } from '@/stores/auth-store'
 import { getSelf } from '@/lib/api'
 import type { User } from '@/features/users/types'
@@ -77,7 +78,7 @@ export function useAuthRedirect() {
         // Restore saved language preference
         const savedLang = getSavedLanguage(user)
         if (savedLang && savedLang !== i18n.language) {
-          i18n.changeLanguage(savedLang)
+          void changeAppLanguage(savedLang)
         }
       }
     } catch (error) {

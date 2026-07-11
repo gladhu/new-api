@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
@@ -20,6 +21,29 @@ const dateFnsDir = path.dirname(
 const vchartPkgDir = path.dirname(
   require.resolve('@visactor/vchart/package.json', { paths: [__dirname] }),
 )
+const visactorSearchPaths = [vchartPkgDir]
+
+function resolveVisactorPkgDir(pkgName: string): string | null {
+  const pkg = `@visactor/${pkgName}`
+  try {
+    const entry = require.resolve(pkg, { paths: visactorSearchPaths })
+    let dir = path.dirname(entry)
+    while (dir !== path.dirname(dir)) {
+      const pkgJsonPath = path.join(dir, 'package.json')
+      if (fs.existsSync(pkgJsonPath)) {
+        const parsed = require(pkgJsonPath) as { name?: string }
+        if (parsed.name === pkg) {
+          return dir
+        }
+      }
+      dir = path.dirname(dir)
+    }
+  } catch {
+    // fall through
+  }
+  return null
+}
+
 const visactorPkgNames = [
   'vrender-core',
   'vrender-kits',
@@ -31,15 +55,8 @@ const visactorPkgNames = [
 ] as const
 const visactorAliases = Object.fromEntries(
   visactorPkgNames.flatMap((name) => {
-    const pkg = `@visactor/${name}`
-    try {
-      const pkgDir = path.dirname(
-        require.resolve(`${pkg}/package.json`, { paths: [vchartPkgDir, __dirname] }),
-      )
-      return [[pkg, pkgDir]]
-    } catch {
-      return []
-    }
+    const pkgDir = resolveVisactorPkgDir(name)
+    return pkgDir ? [[`@visactor/${name}`, pkgDir]] : []
   }),
 )
 

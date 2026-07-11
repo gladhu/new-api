@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
+import { changeAppLanguage } from '@/i18n/load-locale'
 import {
   INTERFACE_LANGUAGE_OPTIONS,
   normalizeInterfaceLanguage,
@@ -67,7 +68,7 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
     const previousLanguage = currentLanguage
     setCurrentLanguage(nextLanguage)
     setSaving(true)
-    await i18n.changeLanguage(nextLanguage)
+    await changeAppLanguage(nextLanguage)
 
     try {
       const response = await updateUserLanguage(nextLanguage)
@@ -93,7 +94,7 @@ export function LanguagePreferencesCard(props: LanguagePreferencesCardProps) {
       toast.success(t('Language preference saved'))
     } catch (_error) {
       setCurrentLanguage(previousLanguage)
-      await i18n.changeLanguage(previousLanguage)
+      await changeAppLanguage(previousLanguage)
       toast.error(t('Failed to update settings'))
     } finally {
       setSaving(false)
