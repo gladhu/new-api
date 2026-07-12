@@ -26,6 +26,12 @@ import {
   ScrollItem,
 } from '@douyinfe/semi-ui';
 import { API, showError, copy, showSuccess } from '../../helpers';
+import {
+  isHomePageEmbedSource,
+  normalizeHomeContentSource,
+  resolveHomePageEmbedSrc,
+  resolveServerAddressForHome,
+} from '../../helpers/homePageContent';
 import { resolveDocsNavLink } from '../../helpers/docsNavLink';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { API_ENDPOINTS } from '../../constants/common.constant';
@@ -84,19 +90,34 @@ const Home = () => {
   const isChinese = i18n.language.startsWith('zh');
 
   const displayHomePageContent = async () => {
-    setHomePageContent(localStorage.getItem('home_page_content') || '');
+    const effectiveServerAddress = resolveServerAddressForHome(serverAddress);
+    const cached = localStorage.getItem('home_page_content') || '';
+    const normalizedCached = normalizeHomeContentSource(
+      cached,
+      effectiveServerAddress,
+    );
+    if (isHomePageEmbedSource(normalizedCached)) {
+      setHomePageContent(normalizedCached);
+    } else if (cached) {
+      setHomePageContent(cached);
+    }
+
     const res = await API.get('/api/home_page_content');
     const { success, message, data } = res.data;
     if (success) {
-      let content = data;
-      if (!data.startsWith('https://')) {
-        content = marked.parse(data);
+      const source = normalizeHomeContentSource(data, effectiveServerAddress);
+      let content = source;
+      if (!isHomePageEmbedSource(source)) {
+        content = marked.parse(source);
       }
       setHomePageContent(content);
-      localStorage.setItem('home_page_content', content);
+      localStorage.setItem(
+        'home_page_content',
+        isHomePageEmbedSource(source) ? source : content,
+      );
 
       // 如果内容是 URL，则发送主题模式
-      if (data.startsWith('https://')) {
+      if (isHomePageEmbedSource(source)) {
         const iframe = document.querySelector('iframe');
         if (iframe) {
           iframe.onload = () => {
@@ -144,7 +165,19 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    if (!homePageContent.startsWith('https://')) return;
+    if (!homePageContent || !isHomePageEmbedSource(homePageContent)) return;
+    const effectiveServerAddress = resolveServerAddressForHome(serverAddress);
+    const normalized = normalizeHomeContentSource(
+      homePageContent,
+      effectiveServerAddress,
+    );
+    if (normalized === homePageContent) return;
+    setHomePageContent(normalized);
+    localStorage.setItem('home_page_content', normalized);
+  }, [serverAddress, homePageContent]);
+
+  useEffect(() => {
+    if (!isHomePageEmbedSource(homePageContent)) return;
     const iframe = document.querySelector('iframe');
     if (!iframe?.contentWindow) return;
     try {
@@ -160,6 +193,11 @@ const Home = () => {
     }, 3000);
     return () => clearInterval(timer);
   }, [endpointItems.length]);
+
+  const homeEmbedSrc = resolveHomePageEmbedSrc(
+    homePageContent,
+    resolveServerAddressForHome(serverAddress),
+  );
 
   return (
     <div className='classic-page-fill classic-home-page w-full overflow-x-hidden'>
@@ -359,9 +397,9 @@ const Home = () => {
         </div>
       ) : (
         <div className='classic-page-fill overflow-x-hidden w-full'>
-          {homePageContent.startsWith('https://') ? (
+          {homeEmbedSrc ? (
             <iframe
-              src={homePageContent}
+              src={homeEmbedSrc}
               className='w-full h-screen border-none'
             />
           ) : (

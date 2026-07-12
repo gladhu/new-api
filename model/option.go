@@ -205,6 +205,9 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == "HomePageContent" {
+		value = common.NormalizeHomePageContentSource(value, system_setting.ServerAddress)
+	}
 	// Save to database first
 	option := Option{
 		Key: key,

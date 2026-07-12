@@ -222,11 +222,15 @@ func GetMidjourney(c *gin.Context) {
 
 func GetHomePageContent(c *gin.Context) {
 	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
+	content := common.NormalizeHomePageContentSource(
+		common.OptionMap["HomePageContent"],
+		system_setting.ServerAddress,
+	)
+	common.OptionMapRWMutex.RUnlock()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    common.OptionMap["HomePageContent"],
+		"data":    content,
 	})
 	return
 }

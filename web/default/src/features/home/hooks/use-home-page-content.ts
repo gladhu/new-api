@@ -23,9 +23,11 @@ import { isHttpUrl, isLikelyHtml } from '@/lib/content-format'
 import { getHomePageContent } from '../api'
 import {
   isFetchableHomeSource,
+  normalizeHomeContentSource,
   resolveHomeContentToInlineHtml,
 } from '../lib/custom-home-html'
 import type { HomeContentMode, HomePageContentResult } from '../types'
+import { getCachedStatus } from '@/hooks/use-status'
 
 const STORAGE_KEY = 'home_page_content'
 const RESOLVED_STORAGE_KEY = 'home_page_content_resolved'
@@ -91,8 +93,14 @@ function getInitialHomeState(): { content: string; mode: HomeContentMode } {
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY)?.trim()
-    if (raw && isFetchableHomeSource(raw)) {
-      return { content: '', mode: 'inline-html' }
+    if (raw) {
+      const serverAddress = getCachedStatus()?.server_address as
+        | string
+        | undefined
+      const source = normalizeHomeContentSource(raw, serverAddress)
+      if (isFetchableHomeSource(source)) {
+        return { content: '', mode: 'inline-html' }
+      }
     }
   } catch {
     /* empty */
@@ -124,7 +132,11 @@ export function useHomePageContent(): HomePageContentResult {
 
       try {
         const response = await getHomePageContent()
-        const source = response.success ? (response.data?.trim() ?? '') : ''
+        const rawSource = response.success ? (response.data?.trim() ?? '') : ''
+        const serverAddress = getCachedStatus()?.server_address as
+          | string
+          | undefined
+        const source = normalizeHomeContentSource(rawSource, serverAddress)
 
         if (!mounted) return
 

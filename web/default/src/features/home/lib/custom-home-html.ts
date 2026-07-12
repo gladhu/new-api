@@ -18,6 +18,39 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { isHttpUrl } from '@/lib/content-format'
 
+function toRelativePath(url: URL): string {
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
+/** Rewrite primary-domain absolute URLs to site-relative paths for CDN mirrors. */
+export function normalizeHomeContentSource(
+  source: string,
+  serverAddress?: string | null
+): string {
+  const trimmed = source.trim()
+  if (!trimmed || trimmed.startsWith('/') || !isHttpUrl(trimmed)) {
+    return trimmed
+  }
+
+  try {
+    const url = new URL(trimmed)
+    if (url.origin === window.location.origin) {
+      return toRelativePath(url)
+    }
+
+    if (serverAddress) {
+      const serverOrigin = new URL(serverAddress.replace(/\/$/, '')).origin
+      if (url.origin === serverOrigin) {
+        return toRelativePath(url)
+      }
+    }
+  } catch {
+    return trimmed
+  }
+
+  return trimmed
+}
+
 export function isSameOriginUrl(value: string): boolean {
   if (!isHttpUrl(value)) return false
   try {
