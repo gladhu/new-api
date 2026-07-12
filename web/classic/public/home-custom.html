@@ -451,6 +451,18 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        cursor: pointer;
+        user-select: none;
+        transition:
+          background 0.15s ease,
+          color 0.15s ease;
+      }
+
+      .hero-api-endpoint:hover,
+      .hero-api-endpoint:focus-visible {
+        background: rgba(139, 92, 246, 0.18);
+        color: var(--text);
+        outline: none;
       }
 
       .hero-api-copy {
@@ -1008,10 +1020,27 @@
             })
         }
 
-        function rotateEndpoint() {
+        var rotateTimer = null
+
+        function showEndpoint(index) {
           if (!apiEndpointEl || !API_ENDPOINTS.length) return
-          endpointIndex = (endpointIndex + 1) % API_ENDPOINTS.length
+          endpointIndex =
+            ((index % API_ENDPOINTS.length) + API_ENDPOINTS.length) %
+            API_ENDPOINTS.length
           apiEndpointEl.textContent = API_ENDPOINTS[endpointIndex]
+        }
+
+        function restartRotateTimer() {
+          if (rotateTimer) clearInterval(rotateTimer)
+          if (!apiEndpointEl || !API_ENDPOINTS.length) return
+          rotateTimer = setInterval(function () {
+            showEndpoint(endpointIndex + 1)
+          }, 3000)
+        }
+
+        function stepEndpoint(delta) {
+          showEndpoint(endpointIndex + delta)
+          restartRotateTimer()
         }
 
         function copyServerAddress() {
@@ -1058,8 +1087,38 @@
           loadServerAddress()
         }
         if (apiEndpointEl && API_ENDPOINTS.length) {
-          apiEndpointEl.textContent = API_ENDPOINTS[0]
-          setInterval(rotateEndpoint, 3000)
+          apiEndpointEl.setAttribute('role', 'button')
+          apiEndpointEl.setAttribute('tabindex', '0')
+          apiEndpointEl.setAttribute('aria-label', 'API 端点，点击或滚动切换')
+          showEndpoint(0)
+          restartRotateTimer()
+          apiEndpointEl.addEventListener('click', function () {
+            stepEndpoint(1)
+          })
+          apiEndpointEl.addEventListener(
+            'wheel',
+            function (event) {
+              event.preventDefault()
+              stepEndpoint(event.deltaY > 0 ? 1 : -1)
+            },
+            { passive: false }
+          )
+          apiEndpointEl.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              stepEndpoint(1)
+              return
+            }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              stepEndpoint(1)
+              return
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              stepEndpoint(-1)
+            }
+          })
         }
         if (apiCopyBtn) {
           apiCopyBtn.addEventListener('click', copyServerAddress)

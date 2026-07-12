@@ -16,14 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type RefObject, useEffect } from 'react'
+import { type RefObject, useLayoutEffect } from 'react'
 import { getCachedStatus } from '@/hooks/use-status'
 
 const API_ENDPOINTS = [
   '/v1/chat/completions',
-  '/v1/completions',
+  '/v1/responses',
+  '/v1/responses/compact',
+  '/v1/messages',
+  '/v1beta/models',
   '/v1/embeddings',
-  '/v1/models',
+  '/v1/rerank',
   '/v1/images/generations',
   '/v1/images/edits',
   '/v1/images/variations',
@@ -32,13 +35,16 @@ const API_ENDPOINTS = [
   '/v1/audio/translations',
 ]
 
+const ROTATE_INTERVAL_MS = 3000
+
 export function useCustomHomeInteractions(
   containerRef: RefObject<HTMLElement | null>,
+  html: string,
   serverAddress?: string | null
 ) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = containerRef.current
-    if (!root) return
+    if (!root || !html.trim()) return
 
     const apiUrlInput = root.querySelector(
       '#hero-api-url'
@@ -65,10 +71,25 @@ export function useCustomHomeInteractions(
           : defaultServerAddress()
     }
 
-    const rotateEndpoint = () => {
+    const showEndpoint = (index: number) => {
       if (!apiEndpointEl || API_ENDPOINTS.length === 0) return
-      endpointIndex = (endpointIndex + 1) % API_ENDPOINTS.length
+      endpointIndex =
+        ((index % API_ENDPOINTS.length) + API_ENDPOINTS.length) %
+        API_ENDPOINTS.length
       apiEndpointEl.textContent = API_ENDPOINTS[endpointIndex]
+    }
+
+    const restartRotateTimer = () => {
+      if (rotateTimer) clearInterval(rotateTimer)
+      if (!apiEndpointEl || API_ENDPOINTS.length === 0) return
+      rotateTimer = setInterval(() => {
+        showEndpoint(endpointIndex + 1)
+      }, ROTATE_INTERVAL_MS)
+    }
+
+    const stepEndpoint = (delta: number) => {
+      showEndpoint(endpointIndex + delta)
+      restartRotateTimer()
     }
 
     const fallbackCopy = (text: string, done?: () => void) => {
@@ -111,6 +132,32 @@ export function useCustomHomeInteractions(
       }
     }
 
+    const onEndpointClick = () => {
+      stepEndpoint(1)
+    }
+
+    const onEndpointWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      stepEndpoint(event.deltaY > 0 ? 1 : -1)
+    }
+
+    const onEndpointKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        stepEndpoint(1)
+        return
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        stepEndpoint(1)
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        stepEndpoint(-1)
+      }
+    }
+
     if (apiUrlInput) {
       const cachedAddress = getCachedStatus()?.server_address
       const resolvedAddress =
@@ -118,16 +165,32 @@ export function useCustomHomeInteractions(
         (typeof cachedAddress === 'string' ? cachedAddress : undefined)
       setServerAddress(resolvedAddress)
     }
+
     if (apiEndpointEl && API_ENDPOINTS.length > 0) {
-      apiEndpointEl.textContent = API_ENDPOINTS[0]
-      rotateTimer = setInterval(rotateEndpoint, 3000)
+      apiEndpointEl.setAttribute('role', 'button')
+      apiEndpointEl.setAttribute('tabindex', '0')
+      apiEndpointEl.setAttribute(
+        'aria-label',
+        'API 端点，点击或滚动切换'
+      )
+      showEndpoint(0)
+      restartRotateTimer()
+      apiEndpointEl.addEventListener('click', onEndpointClick)
+      apiEndpointEl.addEventListener('wheel', onEndpointWheel, {
+        passive: false,
+      })
+      apiEndpointEl.addEventListener('keydown', onEndpointKeyDown)
     }
+
     apiCopyBtn?.addEventListener('click', copyServerAddress)
 
     return () => {
       if (copyResetTimer) clearTimeout(copyResetTimer)
       if (rotateTimer) clearInterval(rotateTimer)
       apiCopyBtn?.removeEventListener('click', copyServerAddress)
+      apiEndpointEl?.removeEventListener('click', onEndpointClick)
+      apiEndpointEl?.removeEventListener('wheel', onEndpointWheel)
+      apiEndpointEl?.removeEventListener('keydown', onEndpointKeyDown)
     }
-  }, [containerRef, serverAddress])
+  }, [containerRef, html, serverAddress])
 }

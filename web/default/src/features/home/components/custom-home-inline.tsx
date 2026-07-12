@@ -43,6 +43,7 @@ export function CustomHomeInline(props: CustomHomeInlineProps) {
   const { status } = useStatus()
   useCustomHomeInteractions(
     containerRef,
+    props.html,
     status?.server_address as string | undefined
   )
 
