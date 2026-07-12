@@ -88,6 +88,102 @@ function resolveSameOriginFetchUrl(value: string): string | null {
   return null
 }
 
+const CUSTOM_HOME_SCOPE = '.custom-home-content'
+
+function findMatchingBrace(css: string, openIndex: number): number {
+  let depth = 0
+  for (let i = openIndex; i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1
+    else if (css[i] === '}') {
+      depth -= 1
+      if (depth === 0) return i
+    }
+  }
+  return css.length - 1
+}
+
+function scopeSelectorList(selectors: string, scope: string): string {
+  return selectors
+    .split(',')
+    .map((raw) => {
+      const sel = raw.trim()
+      if (!sel) return sel
+      if (sel === 'html' || sel === 'body' || sel === ':root') return scope
+      if (
+        sel.includes(scope) ||
+        sel.startsWith(':root:not(.dark)') ||
+        sel.startsWith('.dark .custom-home-content')
+      ) {
+        return sel
+      }
+      return `${scope} ${sel}`
+    })
+    .join(', ')
+}
+
+function scopeCssRules(css: string, scope: string): string {
+  let result = ''
+  let i = 0
+
+  while (i < css.length) {
+    const char = css[i]
+
+    if (char === '@' && css.startsWith('@media', i)) {
+      const blockStart = css.indexOf('{', i)
+      if (blockStart === -1) break
+      const blockEnd = findMatchingBrace(css, blockStart)
+      const mediaQuery = css.slice(i, blockStart + 1)
+      const inner = css.slice(blockStart + 1, blockEnd)
+      result += `${mediaQuery}${scopeCssRules(inner, scope)}}`
+      i = blockEnd + 1
+      continue
+    }
+
+    if (char === '@') {
+      const blockStart = css.indexOf('{', i)
+      if (blockStart === -1) break
+      const blockEnd = findMatchingBrace(css, blockStart)
+      result += css.slice(i, blockEnd + 1)
+      i = blockEnd + 1
+      continue
+    }
+
+    if (/\s/.test(char)) {
+      result += char
+      i += 1
+      continue
+    }
+
+    const ruleStart = i
+    const braceStart = css.indexOf('{', ruleStart)
+    if (braceStart === -1) {
+      result += css.slice(i)
+      break
+    }
+
+    const selectors = css.slice(ruleStart, braceStart).trim()
+    const braceEnd = findMatchingBrace(css, braceStart)
+    const declarations = css.slice(braceStart, braceEnd + 1)
+    result += `${scopeSelectorList(selectors, scope)} ${declarations}`
+    i = braceEnd + 1
+  }
+
+  return result
+}
+
+/** Limit custom home CSS to the inline container so it cannot override global UI. */
+export function scopeCustomHomeStyles(css: string): string {
+  const trimmed = css.trim()
+  if (!trimmed) return trimmed
+
+  const themeMapped = trimmed
+    .replace(/html\.embedded\s+/g, `${CUSTOM_HOME_SCOPE} `)
+    .replace(/html\.light\s+/g, ':root:not(.dark) .custom-home-content ')
+    .replace(/html\.dark\s+/g, '.dark .custom-home-content ')
+
+  return scopeCssRules(themeMapped, CUSTOM_HOME_SCOPE)
+}
+
 /** Strip duplicate site header and keep styles + main body for inline SPA rendering. */
 export function extractInlineHomeHtml(documentHtml: string): string {
   const parser = new DOMParser()

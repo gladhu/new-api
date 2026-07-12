@@ -18,7 +18,27 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from 'vitest'
 
-import { normalizeHomeContentSource } from './custom-home-html'
+import { normalizeHomeContentSource, scopeCustomHomeStyles } from './custom-home-html'
+
+describe('scopeCustomHomeStyles', () => {
+  it('scopes global selectors to the custom home container', () => {
+    const scoped = scopeCustomHomeStyles(`
+      a { color: inherit; }
+      .hero { padding: 1rem; }
+    `)
+
+    expect(scoped).toContain('.custom-home-content a { color: inherit; }')
+    expect(scoped).toContain('.custom-home-content .hero { padding: 1rem; }')
+  })
+
+  it('maps standalone theme hooks to the app shell theme', () => {
+    const scoped = scopeCustomHomeStyles('html.light .btn { color: #111; }')
+
+    expect(scoped).toContain(
+      ':root:not(.dark) .custom-home-content .btn { color: #111; }'
+    )
+  })
+})
 
 describe('normalizeHomeContentSource', () => {
   it('rewrites primary-domain absolute URLs to relative paths', () => {

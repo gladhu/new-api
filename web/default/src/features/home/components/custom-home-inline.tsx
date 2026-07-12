@@ -23,6 +23,7 @@ import { useStatus } from '@/hooks/use-status'
 import { cn } from '@/lib/utils'
 
 import { useCustomHomeInteractions } from '../hooks/use-custom-home-interactions'
+import { scopeCustomHomeStyles } from '../lib/custom-home-html'
 
 interface CustomHomeInlineProps {
   html: string
@@ -45,10 +46,13 @@ export function CustomHomeInline(props: CustomHomeInlineProps) {
     status?.server_address as string | undefined
   )
 
-  const { styles, body } = useMemo(
-    () => splitCustomHomeHtml(props.html),
-    [props.html]
-  )
+  const { styles, body } = useMemo(() => {
+    const split = splitCustomHomeHtml(props.html)
+    return {
+      styles: split.styles ? scopeCustomHomeStyles(split.styles) : '',
+      body: split.body,
+    }
+  }, [props.html])
 
   const sanitizedBody = useMemo(() => DOMPurify.sanitize(body), [body])
 

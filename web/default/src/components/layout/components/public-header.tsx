@@ -284,6 +284,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                     <ProfileDropdown />
                   ) : (
                     <Button
+                      variant='outline'
                       size='sm'
                       className='h-8 rounded-lg px-3.5 text-xs font-medium'
                       render={<Link to='/sign-in' />}
@@ -401,13 +402,18 @@ export function PublicHeader(props: PublicHeaderProps) {
             style={{ transitionDelay: mobileOpen ? '250ms' : '0ms' }}
           >
             {showAuthButtons && (
-              <Link
-                to={isAuthenticated ? '/dashboard' : '/sign-in'}
-                onClick={() => setMobileOpen(false)}
-                className='bg-foreground text-background inline-flex h-10 items-center justify-center rounded-lg text-sm font-medium transition-opacity hover:opacity-90 active:opacity-80'
+              <Button
+                variant='outline'
+                className='h-10 w-full'
+                render={
+                  <Link
+                    to={isAuthenticated ? '/dashboard' : '/sign-in'}
+                    onClick={() => setMobileOpen(false)}
+                  />
+                }
               >
                 {isAuthenticated ? t('Go to Dashboard') : t('Sign in')}
-              </Link>
+              </Button>
             )}
           </div>
         </div>
