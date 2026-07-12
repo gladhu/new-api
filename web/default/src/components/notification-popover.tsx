@@ -91,6 +91,9 @@ interface NotificationPopoverProps {
   className?: string
 }
 
+const notificationTabTriggerClass =
+  'text-foreground/65 hover:text-foreground data-active:bg-background data-active:text-foreground data-active:shadow-sm dark:text-foreground/60 dark:hover:text-foreground dark:data-active:border-transparent dark:data-active:bg-background dark:data-active:text-foreground dark:data-active:shadow-sm h-full w-full min-w-0 flex-none gap-1.5 rounded-lg px-3 py-0 leading-none [&_svg]:text-current'
+
 /**
  * Get relative time string from a date
  */
@@ -377,16 +380,27 @@ export function NotificationPopover({
         </PopoverHeader>
 
         <Tabs
+          className='relative z-10'
           value={activeTab}
-          onValueChange={onTabChange as (value: string) => void}
+          onValueChange={(value) => {
+            if (value === 'notice' || value === 'announcements') {
+              onTabChange(value)
+            }
+          }}
         >
-          <TabsList className='grid w-full grid-cols-2'>
-            <TabsTrigger value='notice' className='gap-1.5'>
-              <Bell className='size-3.5' />
+          <TabsList className='!grid w-full grid-cols-2 items-stretch gap-1 rounded-xl border border-border/40 bg-black/[0.04] p-1 group-data-horizontal/tabs:h-10 dark:border-border/50 dark:bg-white/[0.06]'>
+            <TabsTrigger
+              value='notice'
+              className={notificationTabTriggerClass}
+            >
+              <Bell className='size-3.5 shrink-0' />
               {t('Notice')}
             </TabsTrigger>
-            <TabsTrigger value='announcements' className='gap-1.5'>
-              <Megaphone className='size-3.5' />
+            <TabsTrigger
+              value='announcements'
+              className={notificationTabTriggerClass}
+            >
+              <Megaphone className='size-3.5 shrink-0' />
               {t('Timeline')}
             </TabsTrigger>
           </TabsList>
