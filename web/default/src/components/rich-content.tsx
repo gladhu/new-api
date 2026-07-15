@@ -16,8 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { HtmlContent } from '@/components/html-content'
 import { lazy, Suspense } from 'react'
+
+import {
+  HtmlContent,
+  type HtmlContentVariant,
+} from '@/components/html-content'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const Markdown = lazy(() =>
@@ -31,6 +35,7 @@ interface RichContentProps {
   mode?: RichContentMode
   breaks?: boolean
   className?: string
+  htmlVariant?: HtmlContentVariant
 }
 
 function MarkdownFallback(props: { className?: string }) {
@@ -45,7 +50,13 @@ function MarkdownFallback(props: { className?: string }) {
 
 export function RichContent(props: RichContentProps) {
   if (props.mode === 'html') {
-    return <HtmlContent content={props.content} className={props.className} />
+    return (
+      <HtmlContent
+        content={props.content}
+        className={props.className}
+        variant={props.htmlVariant}
+      />
+    )
   }
 
   return (
