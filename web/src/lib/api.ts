@@ -113,6 +113,13 @@ export async function disable2FA(code: string) {
   return res.data
 }
 
+export async function delete2FADevice(deviceId: number, code: string) {
+  const res = await api.delete(`/api/user/2fa/devices/${deviceId}`, {
+    data: { code },
+  })
+  return res.data
+}
+
 export async function regenerate2FABackupCodes(code: string) {
   const res = await api.post(
     '/api/user/2fa/backup_codes',
