@@ -1,5 +1,5 @@
 # Backend-only build for frontend development
-# Skips frontend build, uses a placeholder for //go:embed web/dist
+# Skips frontend build and uses a placeholder for //go:embed web/dist
 #
 # Reserve RESERVE_CPU_CORES CPUs for the host during compile (default 1).
 
@@ -19,9 +19,8 @@ RUN go mod download
 
 COPY . .
 
-RUN mkdir -p web/default/dist web/classic/dist && \
-    echo '<!doctype html><html><head><title>dev</title></head><body>use frontend dev server</body></html>' > web/default/dist/index.html && \
-    echo '<!doctype html><html><head><title>dev</title></head><body>use frontend dev server</body></html>' > web/classic/dist/index.html
+RUN mkdir -p web/dist && \
+    echo '<!doctype html><html><head><title>dev</title></head><body>use frontend dev server</body></html>' > web/dist/index.html
 
 RUN RESERVE="${RESERVE_CPU_CORES:-1}"; \
     TOTAL=$(nproc); \
