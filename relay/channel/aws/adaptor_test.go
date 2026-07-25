@@ -119,6 +119,106 @@ func TestConvertOpenAIResponsesRequest_BedrockOpenAIReasoningEffortSuffix(t *tes
 	assert.Equal(t, "high", info.ReasoningEffort)
 }
 
+func TestConvertOpenAIResponsesRequest_BedrockMapsGpt56Family(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "gpt-5.6-luna", want: "openai.gpt-5.6-luna"},
+		{in: "gpt-5.6-sol", want: "openai.gpt-5.6-sol"},
+		{in: "gpt-5.6-terra", want: "openai.gpt-5.6-terra"},
+		{in: "openai.gpt-5.6-luna", want: "openai.gpt-5.6-luna"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			adaptor := &Adaptor{}
+			info := &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: tt.in},
+			}
+			converted, err := adaptor.ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{
+				Model: tt.in,
+				Input: json.RawMessage(`"hello"`),
+			})
+			require.NoError(t, err)
+			responsesReq, ok := converted.(dto.OpenAIResponsesRequest)
+			require.True(t, ok)
+			assert.Equal(t, tt.want, responsesReq.Model)
+			assert.Equal(t, tt.want, info.UpstreamModelName)
+		})
+	}
+}
+
+func TestNormalizeCodexResponsesLiteForBedrock(t *testing.T) {
+	t.Parallel()
+
+	req := dto.OpenAIResponsesRequest{
+		Model: "gpt-5.6-luna",
+		Input: json.RawMessage(`[
+			{"type":"additional_tools","role":"developer","tools":[
+				{"type":"custom","name":"exec","description":"run js"},
+				{"type":"function","name":"collaboration.spawn","description":"skip me"},
+				{"type":"function","name":"wait","description":"wait"}
+			]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}
+		]`),
+		Reasoning: &dto.Reasoning{
+			Effort:  "medium",
+			Context: json.RawMessage(`"all_turns"`),
+		},
+	}
+
+	require.NoError(t, normalizeCodexResponsesLiteForBedrock(&req))
+	require.NotNil(t, req.Reasoning)
+	assert.Equal(t, "medium", req.Reasoning.Effort)
+	assert.Empty(t, req.Reasoning.Context)
+
+	var input []map[string]any
+	require.NoError(t, json.Unmarshal(req.Input, &input))
+	require.Len(t, input, 1)
+	assert.Equal(t, "message", input[0]["type"])
+
+	var tools []map[string]any
+	require.NoError(t, json.Unmarshal(req.Tools, &tools))
+	require.Len(t, tools, 2)
+	assert.Equal(t, "exec", tools[0]["name"])
+	assert.Equal(t, "wait", tools[1]["name"])
+}
+
+func TestConvertOpenAIResponsesRequest_BedrockNormalizesLiteEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.6-luna"},
+	}
+	converted, err := adaptor.ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{
+		Model: "gpt-5.6-luna",
+		Input: json.RawMessage(`[
+			{"type":"additional_tools","role":"developer","tools":[{"type":"function","name":"wait"}]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}
+		]`),
+		Reasoning: &dto.Reasoning{Effort: "low", Context: json.RawMessage(`"all_turns"`)},
+	})
+	require.NoError(t, err)
+	responsesReq, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Equal(t, "openai.gpt-5.6-luna", responsesReq.Model)
+	assert.Empty(t, responsesReq.Reasoning.Context)
+
+	var input []map[string]any
+	require.NoError(t, json.Unmarshal(responsesReq.Input, &input))
+	require.Len(t, input, 1)
+	assert.Equal(t, "message", input[0]["type"])
+
+	var tools []map[string]any
+	require.NoError(t, json.Unmarshal(responsesReq.Tools, &tools))
+	require.Len(t, tools, 1)
+	assert.Equal(t, "wait", tools[0]["name"])
+}
+
 func TestGetRequestURL_ClaudeApiKeyModeUsesCorrectRegionOrder(t *testing.T) {
 	t.Parallel()
 
@@ -146,4 +246,7 @@ func TestGetModelList_IncludesBedrockOpenAIModels(t *testing.T) {
 	require.Contains(t, models, "gpt-5.4")
 	require.Contains(t, models, "gpt-5.5")
 	require.Contains(t, models, "gpt-5.6")
+	require.Contains(t, models, "gpt-5.6-luna")
+	require.Contains(t, models, "gpt-5.6-sol")
+	require.Contains(t, models, "gpt-5.6-terra")
 }
