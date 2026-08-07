@@ -71,12 +71,20 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	adaptor.Init(info)
 
 	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
-	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
-		!passThroughGlobal &&
+	// Bedrock Mantle OpenAI models only accept /v1/responses. Always convert
+	// chat/completions for them (including when request passthrough is enabled),
+	// otherwise upstream returns validation_error for /v1/chat/completions.
+	bedrockChatCompat := service.ShouldBedrockOpenAIChatCompletionsCompat(
+		info.ChannelType,
+		info.ChannelBaseUrl,
+		info.OriginModelName,
+		info.UpstreamModelName,
+		request.Model,
+	)
+	policyChatCompat := !passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		(service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) ||
-			service.ShouldBedrockOpenAIUseResponses(info.ChannelType, info.OriginModelName) ||
-			service.ShouldBedrockOpenAIUseResponses(info.ChannelType, request.Model)) {
+		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)
+	if info.RelayMode == relayconstant.RelayModeChatCompletions && (bedrockChatCompat || policyChatCompat) {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {

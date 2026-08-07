@@ -52,6 +52,15 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeCodex {
 		return string(constant.EndpointTypeOpenAIResponse)
 	}
+	// Bedrock Mantle OpenAI models only support /v1/responses.
+	if common.IsBedrockOpenAIModel(modelName) {
+		if channel != nil && channel.Type == constant.ChannelTypeAws {
+			return string(constant.EndpointTypeOpenAIResponse)
+		}
+		if channel != nil && strings.Contains(strings.ToLower(channel.GetBaseURL()), "bedrock-mantle") {
+			return string(constant.EndpointTypeOpenAIResponse)
+		}
+	}
 	return normalized
 }
 
