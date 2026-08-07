@@ -76,6 +76,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	// otherwise upstream returns validation_error for /v1/chat/completions.
 	bedrockChatCompat := service.ShouldBedrockOpenAIChatCompletionsCompat(
 		info.ChannelType,
+		info.ApiType,
 		info.ChannelBaseUrl,
 		info.OriginModelName,
 		info.UpstreamModelName,

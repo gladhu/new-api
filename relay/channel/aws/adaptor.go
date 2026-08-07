@@ -101,9 +101,8 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		if info.ChannelOtherSettings.AwsKeyType != dto.AwsKeyTypeApiKey {
 			return "", errors.New("Bedrock OpenAI models require API Key authentication (aws_key_type: api_key)")
 		}
-		if info.RelayMode != relayconstant.RelayModeResponses {
-			return "", errors.New("Bedrock OpenAI models only support /v1/responses")
-		}
+		// Mantle OpenAI models only expose /openai/v1/responses. Chat/completions
+		// callers are converted before DoRequest (TextHelper or ConvertOpenAIRequest).
 		a.ClientMode = ClientModeApiKey
 		_, region, err := parseAwsApiKeyAndRegion(info.ApiKey)
 		if err != nil {
@@ -152,8 +151,10 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if common.IsBedrockOpenAIModel(request.Model) || common.IsBedrockOpenAIModel(info.UpstreamModelName) {
-		return nil, errors.New("Bedrock OpenAI models only support /v1/responses")
+	if common.IsBedrockOpenAIModel(request.Model) ||
+		common.IsBedrockOpenAIModel(info.UpstreamModelName) ||
+		common.IsBedrockOpenAIModel(info.OriginModelName) {
+		return a.convertChatCompletionsToBedrockResponses(c, info, request)
 	}
 	// 检查是否为Nova模型
 	if isNovaModel(request.Model) {
@@ -173,6 +174,33 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	}
 	info.UpstreamModelName = claudeReq.Model
 	return claudeReq, err
+}
+
+// convertChatCompletionsToBedrockResponses rewrites OpenAI chat/completions into the
+// Mantle Responses body so /v1/chat/completions (and playground /pg/chat/completions)
+// work for Bedrock-hosted OpenAI models.
+func (a *Adaptor) convertChatCompletionsToBedrockResponses(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (any, error) {
+	result, err := service.ConvertRequestVia(c, info, request, types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert chat completions to responses for Bedrock OpenAI")
+	}
+	responsesReq, ok := result.Value.(*dto.OpenAIResponsesRequest)
+	if !ok {
+		return nil, fmt.Errorf("expected OpenAI responses request, got %T", result.Value)
+	}
+	converted, effort, err := convertBedrockOpenAIResponsesRequest(info.UpstreamModelName, *responsesReq)
+	if err != nil {
+		return nil, err
+	}
+	info.UpstreamModelName = converted.Model
+	if effort != "" {
+		info.ReasoningEffort = effort
+	} else if converted.Reasoning != nil && converted.Reasoning.Effort != "" {
+		info.ReasoningEffort = converted.Reasoning.Effort
+	}
+	info.RelayMode = relayconstant.RelayModeResponses
+	a.IsBedrockOpenAI = true
+	return converted, nil
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
@@ -211,6 +239,14 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	if a.IsBedrockOpenAI || a.isBedrockOpenAIRequest(info) {
+		// Chat/completions (incl. playground) keep RelayFormatOpenAI; convert Mantle
+		// Responses output back to chat completions for the client.
+		if info.RelayFormat == types.RelayFormatOpenAI {
+			if info.IsStream {
+				return openai.OaiResponsesToChatStreamHandler(c, info, resp)
+			}
+			return openai.OaiResponsesToChatHandler(c, info, resp)
+		}
 		if info.IsStream {
 			return openai.OaiResponsesStreamHandler(c, info, resp)
 		}
