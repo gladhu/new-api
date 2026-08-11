@@ -25,19 +25,41 @@ For commercial licensing, please contact support@quantumnous.com
  * - Chained properties: "OpenAI.Avatar.type={'platform'}"
  * - Size parameter: getLobeIcon("OpenAI", 20)
  */
-import { useEffect, useState, type ReactNode } from 'react'
+/* eslint-disable react/only-export-components */
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 
-type LobeIconsModule = Record<string, unknown>
+type LobeIconComponent = ComponentType<Record<string, unknown>> &
+  Record<string, unknown>
 
-let lobeIconsPromise: Promise<LobeIconsModule> | null = null
+// Icon modules live in one directory per brand, e.g. @lobehub/icons/es/OpenAI.
+// Vendor icon keys come from admin-editable data, so reject anything that cannot
+// be a directory name before it reaches the bundler's dynamic import.
+const ICON_MODULE_NAME = /^[A-Za-z][A-Za-z0-9]*$/
 
-function loadLobeIcons(): Promise<LobeIconsModule> {
-  if (!lobeIconsPromise) {
-    lobeIconsPromise = import('@lobehub/icons').then(
-      (mod) => mod as LobeIconsModule
-    )
-  }
-  return lobeIconsPromise
+const lobeIconPromises = new Map<string, Promise<LobeIconComponent | null>>()
+
+function loadLobeIcon(baseKey: string): Promise<LobeIconComponent | null> {
+  if (!ICON_MODULE_NAME.test(baseKey)) return Promise.resolve(null)
+
+  const existing = lobeIconPromises.get(baseKey)
+  if (existing) return existing
+
+  // The static prefix and suffix keep this a per-brand lazy chunk instead of
+  // pulling the whole icon library into the importing route. webpackInclude is
+  // matched against absolute resource paths and restricts the generated context
+  // to brand directories, since es/components/* holds demo widgets that depend
+  // on packages this app does not install.
+  const pending = import(
+    /* webpackInclude: /icons[\\/]es[\\/][A-Za-z0-9]+[\\/]index\.js$/ */
+    `@lobehub/icons/es/${baseKey}/index.js`
+  )
+    .then((mod) => mod.default as LobeIconComponent)
+    .catch(() => {
+      lobeIconPromises.delete(baseKey)
+      return null
+    })
+  lobeIconPromises.set(baseKey, pending)
+  return pending
 }
 
 function parseValue(raw: string | undefined | null): string | number | boolean {
@@ -80,27 +102,21 @@ function renderFallback(iconName: string | undefined | null, size: number) {
   )
 }
 
-function renderLobeIconFromModule(
-  LobeIcons: LobeIconsModule,
+function renderLobeIcon(
+  BaseIcon: LobeIconComponent,
   iconName: string,
   size: number
 ): ReactNode {
   const segments = iconName.split('.')
-  const baseKey = segments[0]
-  const BaseIcon = LobeIcons[baseKey] as Record<string, unknown> | undefined
 
-  let IconComponent: React.ComponentType<Record<string, unknown>> | undefined
+  let IconComponent: LobeIconComponent | undefined
   let propStartIndex: number
 
-  if (BaseIcon && segments.length > 1 && BaseIcon[segments[1]]) {
-    IconComponent = BaseIcon[segments[1]] as React.ComponentType<
-      Record<string, unknown>
-    >
+  if (segments.length > 1 && BaseIcon[segments[1]]) {
+    IconComponent = BaseIcon[segments[1]] as LobeIconComponent
     propStartIndex = 2
   } else {
-    IconComponent = LobeIcons[baseKey] as
-      | React.ComponentType<Record<string, unknown>>
-      | undefined
+    IconComponent = BaseIcon
     propStartIndex = segments.length > 1 && /^[A-Z]/.test(segments[1]) ? 2 : 1
   }
 
@@ -159,9 +175,14 @@ function LobeIcon(props: {
     let cancelled = false
     setIcon(renderFallback(trimmedName, size))
 
-    void loadLobeIcons().then((LobeIcons) => {
+    const baseKey = trimmedName.split('.')[0]
+    void loadLobeIcon(baseKey).then((BaseIcon) => {
       if (cancelled) return
-      setIcon(renderLobeIconFromModule(LobeIcons, trimmedName, size))
+      if (!BaseIcon) {
+        setIcon(renderFallback(trimmedName, size))
+        return
+      }
+      setIcon(renderLobeIcon(BaseIcon, trimmedName, size))
     })
 
     return () => {
