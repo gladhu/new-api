@@ -28,8 +28,14 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react/only-export-components */
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 
+import { IconSub2api } from '@/assets/custom/icon-sub2api'
+
 type LobeIconComponent = ComponentType<Record<string, unknown>> &
   Record<string, unknown>
+
+const CUSTOM_ICONS: Record<string, ComponentType<{ size?: number }>> = {
+  Sub2API: IconSub2api,
+}
 
 // Icon modules live in one directory per brand, e.g. @lobehub/icons/es/OpenAI.
 // Vendor icon keys come from admin-editable data, so reject anything that cannot
@@ -172,10 +178,16 @@ function LobeIcon(props: {
       return
     }
 
+    const baseKey = trimmedName.split('.')[0]
+    const CustomIcon = CUSTOM_ICONS[baseKey]
+    if (CustomIcon) {
+      setIcon(<CustomIcon size={size} />)
+      return
+    }
+
     let cancelled = false
     setIcon(renderFallback(trimmedName, size))
 
-    const baseKey = trimmedName.split('.')[0]
     void loadLobeIcon(baseKey).then((BaseIcon) => {
       if (cancelled) return
       if (!BaseIcon) {
