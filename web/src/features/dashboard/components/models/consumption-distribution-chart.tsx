@@ -109,7 +109,6 @@ export function ConsumptionDistributionChart(
         timeGranularity,
         t,
         props.chartTimeRange,
-        customization.preset,
         chartRadius
       ),
     [
@@ -118,7 +117,6 @@ export function ConsumptionDistributionChart(
       timeGranularity,
       t,
       props.chartTimeRange,
-      customization.preset,
       chartRadius,
     ]
   )

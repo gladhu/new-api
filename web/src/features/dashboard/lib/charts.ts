@@ -83,7 +83,6 @@ export function processChartData(
   timeGranularity: TimeGranularity = 'day',
   t?: TFunction,
   timeRange?: ChartTimeRange,
-  themeKey?: string,
   chartCornerRadius?: number
 ): ProcessedChartData {
   const tt: TFunction = t ?? ((x) => x)

@@ -107,7 +107,6 @@ export function ModelCharts(props: ModelChartsProps) {
         timeGranularity,
         t,
         props.chartTimeRange,
-        customization.preset,
         chartRadius
       ),
     [
@@ -116,7 +115,6 @@ export function ModelCharts(props: ModelChartsProps) {
       timeGranularity,
       t,
       props.chartTimeRange,
-      customization.preset,
       chartRadius,
     ]
   )
