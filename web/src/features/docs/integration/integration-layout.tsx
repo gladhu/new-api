@@ -76,10 +76,16 @@ export function IntegrationDocsShell() {
             <p className='text-muted-foreground text-xs'>{t('Integration')}</p>
           </div>
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant='outline' size='icon' aria-label={t('Open menu')}>
-                <Menu className='size-4' />
-              </Button>
+            <SheetTrigger
+              render={
+                <Button
+                  variant='outline'
+                  size='icon'
+                  aria-label={t('Open menu')}
+                />
+              }
+            >
+              <Menu className='size-4' />
             </SheetTrigger>
             <SheetContent side='left' className='w-[280px]'>
               <SheetHeader>
