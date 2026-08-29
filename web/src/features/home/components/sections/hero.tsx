@@ -143,7 +143,7 @@ export function Hero(props: HeroProps) {
                     <Link
                       to='/dashboard/$section'
                       params={{ section: 'overview' }}
-                      preload='render'
+                      preload={false}
                     />
                   }
                 >

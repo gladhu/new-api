@@ -286,6 +286,9 @@ export function PublicHeader(props: PublicHeaderProps) {
                     key={i}
                     to={link.href}
                     disabled={link.disabled}
+                    preload={
+                      link.href.startsWith('/dashboard') ? false : undefined
+                    }
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
@@ -429,6 +432,9 @@ export function PublicHeader(props: PublicHeaderProps) {
                   key={i}
                   to={link.href}
                   disabled={link.disabled}
+                  preload={
+                    link.href.startsWith('/dashboard') ? false : undefined
+                  }
                   onClick={(event) => handleNavLinkClick(event, link, true)}
                   className={linkClassName}
                   style={transitionStyle}
@@ -458,6 +464,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                     params={
                       isAuthenticated ? { section: 'overview' } : undefined
                     }
+                    preload={isAuthenticated ? false : undefined}
                     onClick={() => setMobileOpen(false)}
                   />
                 }

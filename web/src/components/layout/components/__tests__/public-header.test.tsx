@@ -35,13 +35,19 @@ vi.mock('@tanstack/react-router', () => ({
     params?: Record<string, string>
     children: ReactNode
     className?: string
-    preload?: string
+    preload?: false | string
   }) => {
     const href = props.params
       ? props.to.replaceAll(/\$(\w+)/g, (_, key: string) => props.params?.[key] ?? '')
       : props.to
     return (
-      <a href={href} className={props.className} data-preload={props.preload}>
+      <a
+        href={href}
+        className={props.className}
+        data-preload={
+          props.preload === undefined ? undefined : String(props.preload)
+        }
+      >
         {props.children}
       </a>
     )
@@ -177,7 +183,7 @@ describe('PublicHeader mobile navigation', () => {
     ).toHaveAttribute('href', '/dashboard/overview')
   })
 
-  test('warms the console route after mount for a signed-in user without render-preload links', async () => {
+  test('warms the console route after mount and leaves console links on click-only navigation', async () => {
     renderHeader()
 
     const consoleAndDashboardLinks = [
@@ -186,7 +192,7 @@ describe('PublicHeader mobile navigation', () => {
     ]
     expect(
       consoleAndDashboardLinks.every(
-        (link) => link.getAttribute('data-preload') !== 'render'
+        (link) => link.getAttribute('data-preload') === 'false'
       )
     ).toBe(true)
 
