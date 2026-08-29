@@ -410,7 +410,10 @@ export function PublicHeader(props: PublicHeaderProps) {
                 className='h-10 w-full'
                 render={
                   <Link
-                    to={isAuthenticated ? '/dashboard' : '/sign-in'}
+                    to={isAuthenticated ? '/dashboard/$section' : '/sign-in'}
+                    params={
+                      isAuthenticated ? { section: 'overview' } : undefined
+                    }
                     onClick={() => setMobileOpen(false)}
                   />
                 }

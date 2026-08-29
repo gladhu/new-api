@@ -16,22 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import * as React from 'react'
+import { useMediaQuery } from './use-media-query'
 
 const MOBILE_BREAKPOINT = 768
 
+/**
+ * Must be correct on the first client paint. A deferred `undefined → true`
+ * update treats phones as desktop first, so the hamburger toggles the hidden
+ * desktop sidebar instead of the mobile sheet.
+ */
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener('change', onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener('change', onChange)
-  }, [])
-
-  return !!isMobile
+  return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
 }

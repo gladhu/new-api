@@ -68,9 +68,10 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('Home'), href: '/' })
   }
 
-  // Console -> /dashboard (new console path)
+  // Console lands on the overview section directly so the first mobile tap
+  // does not pay an extra /dashboard -> /dashboard/overview redirect.
   if (modules?.console !== false) {
-    links.push({ title: t('Console'), href: '/dashboard' })
+    links.push({ title: t('Console'), href: '/dashboard/overview' })
   }
 
   // Pricing

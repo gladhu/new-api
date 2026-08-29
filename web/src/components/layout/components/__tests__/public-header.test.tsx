@@ -87,7 +87,7 @@ vi.mock('@/hooks/use-system-config', () => ({
 vi.mock('@/hooks/use-top-nav-links', () => ({
   useTopNavLinks: () => [
     { title: 'Home', href: '/' },
-    { title: 'Console', href: '/dashboard' },
+    { title: 'Console', href: '/dashboard/overview' },
   ],
 }))
 
@@ -148,5 +148,20 @@ describe('PublicHeader mobile navigation', () => {
     expect(screen.getAllByRole('link', { name: 'Console' }).length).toBeGreaterThan(
       0
     )
+  })
+
+  test('sends Console and dashboard entry points to the overview section', () => {
+    renderHeader()
+
+    const consoleLinks = screen.getAllByRole('link', { name: 'Console' })
+    expect(
+      consoleLinks.every(
+        (link) => link.getAttribute('href') === '/dashboard/overview'
+      )
+    ).toBe(true)
+
+    expect(
+      screen.getByRole('link', { name: 'Go to Dashboard' })
+    ).toHaveAttribute('href', '/dashboard/overview')
   })
 })
