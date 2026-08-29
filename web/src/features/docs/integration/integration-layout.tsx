@@ -81,6 +81,7 @@ export function IntegrationDocsShell() {
                 <Button
                   variant='outline'
                   size='icon'
+                  className='text-foreground'
                   aria-label={t('Open menu')}
                 />
               }

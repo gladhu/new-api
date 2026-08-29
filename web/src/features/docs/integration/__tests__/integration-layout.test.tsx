@@ -77,6 +77,9 @@ describe('Integration docs mobile navigation', () => {
 
     const menuButton = screen.getByRole('button', { name: 'Open menu' })
     expect(menuButton).toBeEnabled()
+    expect(menuButton.className.split(' ')).toEqual(
+      expect.arrayContaining(['text-foreground'])
+    )
     expect(
       screen.queryByRole('heading', { name: 'Integration guides' })
     ).not.toBeInTheDocument()

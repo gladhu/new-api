@@ -306,28 +306,29 @@ export function PublicHeader(props: PublicHeaderProps) {
               )}
               <Button
                 type='button'
-                variant='ghost'
+                variant='outline'
                 size='icon'
-                className='size-9'
+                className='text-foreground size-9'
                 onClick={() => setMobileOpen((v) => !v)}
                 aria-label={t('Toggle navigation menu')}
+                aria-expanded={mobileOpen}
               >
                 <div className='relative size-4'>
                   <span
                     className={cn(
-                      'absolute inset-x-0 block h-[1.5px] origin-center rounded-full bg-current transition-all duration-300',
+                      'bg-foreground absolute inset-x-0 block h-0.5 origin-center rounded-full transition-all duration-300',
                       mobileOpen ? 'top-[7px] rotate-45' : 'top-[3px]'
                     )}
                   />
                   <span
                     className={cn(
-                      'absolute inset-x-0 top-[7px] block h-[1.5px] rounded-full bg-current transition-all duration-300',
+                      'bg-foreground absolute inset-x-0 top-[7px] block h-0.5 rounded-full transition-all duration-300',
                       mobileOpen ? 'scale-x-0 opacity-0' : 'opacity-100'
                     )}
                   />
                   <span
                     className={cn(
-                      'absolute inset-x-0 block h-[1.5px] origin-center rounded-full bg-current transition-all duration-300',
+                      'bg-foreground absolute inset-x-0 block h-0.5 origin-center rounded-full transition-all duration-300',
                       mobileOpen ? 'top-[7px] -rotate-45' : 'top-[11px]'
                     )}
                   />
