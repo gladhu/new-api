@@ -144,6 +144,27 @@ export function PublicHeader(props: PublicHeaderProps) {
     navigate({ to: '/sign-in', search: { redirect } })
   }, [authPromptTarget?.href, navigate])
 
+  const consoleHrefKey = links
+    .filter(
+      (link) =>
+        !link.external &&
+        !link.disabled &&
+        link.href.startsWith('/dashboard')
+    )
+    .map((link) => link.href)
+    .join('\n')
+
+  useEffect(() => {
+    if (!isAuthenticated || consoleHrefKey.length === 0) {
+      return
+    }
+
+    preloadNavHrefs(
+      (options) => router.preloadRoute(options as never),
+      consoleHrefKey.split('\n')
+    )
+  }, [consoleHrefKey, isAuthenticated, router])
+
   const handleNavLinkClick = useCallback(
     (
       event: React.MouseEvent<HTMLAnchorElement>,
@@ -184,7 +205,8 @@ export function PublicHeader(props: PublicHeaderProps) {
             !link.external &&
             !link.disabled &&
             !link.requiresAuth &&
-            link.href !== pathname
+            link.href !== pathname &&
+            !(isAuthenticated && link.href.startsWith('/dashboard'))
         )
         .map((link) => link.href)
       preloadNavHrefs(
@@ -193,7 +215,7 @@ export function PublicHeader(props: PublicHeaderProps) {
       )
     }
     setMobileOpen(nextOpen)
-  }, [links, mobileOpen, pathname, router])
+  }, [isAuthenticated, links, mobileOpen, pathname, router])
 
   return (
     <>
@@ -264,11 +286,6 @@ export function PublicHeader(props: PublicHeaderProps) {
                     key={i}
                     to={link.href}
                     disabled={link.disabled}
-                    preload={
-                      isAuthenticated && link.href.startsWith('/dashboard')
-                        ? 'render'
-                        : undefined
-                    }
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
@@ -412,11 +429,6 @@ export function PublicHeader(props: PublicHeaderProps) {
                   key={i}
                   to={link.href}
                   disabled={link.disabled}
-                  preload={
-                    isAuthenticated && link.href.startsWith('/dashboard')
-                      ? 'render'
-                      : undefined
-                  }
                   onClick={(event) => handleNavLinkClick(event, link, true)}
                   className={linkClassName}
                   style={transitionStyle}
@@ -446,7 +458,6 @@ export function PublicHeader(props: PublicHeaderProps) {
                     params={
                       isAuthenticated ? { section: 'overview' } : undefined
                     }
-                    preload={isAuthenticated ? 'render' : undefined}
                     onClick={() => setMobileOpen(false)}
                   />
                 }

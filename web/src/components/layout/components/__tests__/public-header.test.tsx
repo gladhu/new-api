@@ -16,12 +16,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-const preloadRoute = vi.hoisted(() => vi.fn(() => Promise.resolve()))
+const { preloadRoute, router } = vi.hoisted(() => {
+  const preloadRoute = vi.fn(() => Promise.resolve())
+  return {
+    preloadRoute,
+    router: { preloadRoute },
+  }
+})
 
 vi.mock('@tanstack/react-router', () => ({
   Link: (props: {
@@ -32,7 +38,7 @@ vi.mock('@tanstack/react-router', () => ({
     preload?: string
   }) => {
     const href = props.params
-      ? props.to.replace(/\$(\w+)/g, (_, key: string) => props.params?.[key] ?? '')
+      ? props.to.replaceAll(/\$(\w+)/g, (_, key: string) => props.params?.[key] ?? '')
       : props.to
     return (
       <a href={href} className={props.className} data-preload={props.preload}>
@@ -41,7 +47,7 @@ vi.mock('@tanstack/react-router', () => ({
     )
   },
   useNavigate: () => vi.fn(),
-  useRouter: () => ({ preloadRoute }),
+  useRouter: () => router,
   useRouterState: () => ({ location: { pathname: '/' } }),
 }))
 
@@ -91,6 +97,7 @@ vi.mock('@/hooks/use-top-nav-links', () => ({
   useTopNavLinks: () => [
     { title: 'Home', href: '/' },
     { title: 'Console', href: '/dashboard/overview' },
+    { title: 'Model Square', href: '/pricing' },
   ],
 }))
 
@@ -111,6 +118,7 @@ await i18n.use(initReactI18next).init({
         Console: 'Console',
         'Go to Dashboard': 'Go to Dashboard',
         Home: 'Home',
+        'Model Square': 'Model Square',
         'Toggle navigation menu': 'Toggle navigation menu',
       },
     },
@@ -169,15 +177,42 @@ describe('PublicHeader mobile navigation', () => {
     ).toHaveAttribute('href', '/dashboard/overview')
   })
 
-  test('starts downloading in-app destinations when the mobile menu opens', async () => {
+  test('warms the console route after mount for a signed-in user without render-preload links', async () => {
+    renderHeader()
+
+    const consoleAndDashboardLinks = [
+      ...screen.getAllByRole('link', { name: 'Console' }),
+      screen.getByRole('link', { name: 'Go to Dashboard' }),
+    ]
+    expect(
+      consoleAndDashboardLinks.every(
+        (link) => link.getAttribute('data-preload') !== 'render'
+      )
+    ).toBe(true)
+
+    await waitFor(() => {
+      expect(preloadRoute).toHaveBeenCalledWith({
+        to: '/dashboard/$section',
+        params: { section: 'overview' },
+      })
+    })
+  })
+
+  test('starts downloading other in-app destinations when the mobile menu opens', async () => {
     const user = userEvent.setup()
     renderHeader()
+
+    await waitFor(() => {
+      expect(preloadRoute).toHaveBeenCalled()
+    })
+    preloadRoute.mockClear()
 
     await user.click(
       screen.getByRole('button', { name: 'Toggle navigation menu' })
     )
 
-    expect(preloadRoute).toHaveBeenCalledWith({
+    expect(preloadRoute).toHaveBeenCalledWith({ to: '/pricing' })
+    expect(preloadRoute).not.toHaveBeenCalledWith({
       to: '/dashboard/$section',
       params: { section: 'overview' },
     })
