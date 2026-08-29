@@ -21,6 +21,8 @@ import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
+const preloadRoute = vi.hoisted(() => vi.fn(() => Promise.resolve()))
+
 vi.mock('@tanstack/react-router', () => ({
   Link: (props: {
     to: string
@@ -39,6 +41,7 @@ vi.mock('@tanstack/react-router', () => ({
     )
   },
   useNavigate: () => vi.fn(),
+  useRouter: () => ({ preloadRoute }),
   useRouterState: () => ({ location: { pathname: '/' } }),
 }))
 
@@ -116,6 +119,7 @@ await i18n.use(initReactI18next).init({
 
 afterEach(() => {
   cleanup()
+  preloadRoute.mockClear()
 })
 
 function renderHeader() {
@@ -163,5 +167,19 @@ describe('PublicHeader mobile navigation', () => {
     expect(
       screen.getByRole('link', { name: 'Go to Dashboard' })
     ).toHaveAttribute('href', '/dashboard/overview')
+  })
+
+  test('starts downloading in-app destinations when the mobile menu opens', async () => {
+    const user = userEvent.setup()
+    renderHeader()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Toggle navigation menu' })
+    )
+
+    expect(preloadRoute).toHaveBeenCalledWith({
+      to: '/dashboard/$section',
+      params: { section: 'overview' },
+    })
   })
 })

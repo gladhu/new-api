@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import { preloadNavHrefs } from '../lib/preload-nav-routes'
 import type { TopNavLink } from '../types'
 import { HeaderLogo } from './header-logo'
 
@@ -90,6 +91,7 @@ export function PublicHeader(props: PublicHeaderProps) {
   } = useSystemConfig()
   const dynamicLinks = useTopNavLinks()
   const notifications = useNotifications()
+  const router = useRouter()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
 
@@ -173,6 +175,26 @@ export function PublicHeader(props: PublicHeaderProps) {
     [t]
   )
 
+  const toggleMobileMenu = useCallback(() => {
+    const nextOpen = !mobileOpen
+    if (nextOpen) {
+      const hrefs = links
+        .filter(
+          (link) =>
+            !link.external &&
+            !link.disabled &&
+            !link.requiresAuth &&
+            link.href !== pathname
+        )
+        .map((link) => link.href)
+      preloadNavHrefs(
+        (options) => router.preloadRoute(options as never),
+        hrefs
+      )
+    }
+    setMobileOpen(nextOpen)
+  }, [links, mobileOpen, pathname, router])
+
   return (
     <>
       <header className='pointer-events-none fixed inset-x-0 top-0 z-50'>
@@ -242,6 +264,11 @@ export function PublicHeader(props: PublicHeaderProps) {
                     key={i}
                     to={link.href}
                     disabled={link.disabled}
+                    preload={
+                      isAuthenticated && link.href.startsWith('/dashboard')
+                        ? 'render'
+                        : undefined
+                    }
                     onClick={(event) => handleNavLinkClick(event, link)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200',
@@ -309,7 +336,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 variant='outline'
                 size='icon'
                 className='text-foreground size-9'
-                onClick={() => setMobileOpen((v) => !v)}
+                onClick={toggleMobileMenu}
                 aria-label={t('Toggle navigation menu')}
                 aria-expanded={mobileOpen}
               >
@@ -385,6 +412,11 @@ export function PublicHeader(props: PublicHeaderProps) {
                   key={i}
                   to={link.href}
                   disabled={link.disabled}
+                  preload={
+                    isAuthenticated && link.href.startsWith('/dashboard')
+                      ? 'render'
+                      : undefined
+                  }
                   onClick={(event) => handleNavLinkClick(event, link, true)}
                   className={linkClassName}
                   style={transitionStyle}
@@ -414,6 +446,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                     params={
                       isAuthenticated ? { section: 'overview' } : undefined
                     }
+                    preload={isAuthenticated ? 'render' : undefined}
                     onClick={() => setMobileOpen(false)}
                   />
                 }

@@ -39,6 +39,7 @@ export function HeroButtons({ isAuthenticated }: HeroButtonsProps) {
           <Link
             to='/dashboard/$section'
             params={{ section: 'overview' }}
+            preload='render'
           />
         }
       >
