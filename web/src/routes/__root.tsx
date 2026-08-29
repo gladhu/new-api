@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import {
@@ -47,6 +47,7 @@ import { useAuthStore } from '@/stores/auth-store'
 function RootComponent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [showDevtools, setShowDevtools] = useState(true)
 
   useStatus()
   useSystemConfig()
@@ -99,8 +100,19 @@ function RootComponent() {
       <Toaster closeButton duration={5000} position='top-center' richColors />
       {import.meta.env.MODE === 'development' && (
         <>
-          <ReactQueryDevtools buttonPosition='bottom-left' />
-          <TanStackRouterDevtools position='bottom-right' />
+          <button
+            type='button'
+            className='fixed right-2 bottom-20 z-[2147483647] rounded border bg-background px-1.5 py-0.5 text-[10px] font-semibold'
+            onClick={() => setShowDevtools((open) => !open)}
+          >
+            TS
+          </button>
+          {showDevtools ? (
+            <>
+              <ReactQueryDevtools buttonPosition='bottom-left' />
+              <TanStackRouterDevtools position='bottom-right' />
+            </>
+          ) : null}
         </>
       )}
     </ThemeCustomizationProvider>
