@@ -22,6 +22,61 @@ function toRelativePath(url: URL): string {
   return `${url.pathname}${url.search}${url.hash}`
 }
 
+const HOME_API_URL_SELECTOR = '#hero-api-url'
+
+function readAddressField(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+/** Same shape as the original `/api/status` body: `data.server_address` or flat. */
+export function readStatusServerAddress(
+  status: Record<string, unknown> | null | undefined
+): string | undefined {
+  if (!status) return undefined
+
+  const direct = readAddressField(status.server_address ?? status.serverAddress)
+  if (direct) return direct
+
+  const nested = status.data
+  if (!nested || typeof nested !== 'object') return undefined
+  const data = nested as Record<string, unknown>
+  return readAddressField(data.server_address ?? data.serverAddress)
+}
+
+/** Prefer the configured server address, then the current origin. */
+export function resolveDisplayServerAddress(
+  serverAddress?: string | null
+): string {
+  const trimmed = readAddressField(serverAddress)
+  if (trimmed) return trimmed.replace(/\/$/, '')
+
+  if (typeof window === 'undefined') return ''
+  const origin = window.location?.origin
+  if (!origin || origin === 'null') return ''
+  return origin.replace(/\/$/, '')
+}
+
+/** Write the API base URL into markup so React innerHTML resets stay populated. */
+export function applyHomeServerAddress(
+  html: string,
+  serverAddress: string
+): string {
+  if (!html.trim() || !serverAddress || typeof document === 'undefined') {
+    return html
+  }
+
+  const template = document.createElement('template')
+  template.innerHTML = html
+  const target = template.content.querySelector(HOME_API_URL_SELECTOR)
+  if (!(target instanceof HTMLInputElement)) return html
+
+  target.value = serverAddress
+  target.setAttribute('value', serverAddress)
+  return template.innerHTML
+}
+
 /** Rewrite primary-domain absolute URLs to site-relative paths for CDN mirrors. */
 export function normalizeHomeContentSource(
   source: string,
@@ -177,9 +232,9 @@ export function scopeCustomHomeStyles(css: string): string {
   if (!trimmed) return trimmed
 
   const themeMapped = trimmed
-    .replace(/html\.embedded\s+/g, `${CUSTOM_HOME_SCOPE} `)
-    .replace(/html\.light\s+/g, ':root:not(.dark) .custom-home-content ')
-    .replace(/html\.dark\s+/g, '.dark .custom-home-content ')
+    .replaceAll(/html\.embedded\s+/g, `${CUSTOM_HOME_SCOPE} `)
+    .replaceAll(/html\.light\s+/g, ':root:not(.dark) .custom-home-content ')
+    .replaceAll(/html\.dark\s+/g, '.dark .custom-home-content ')
 
   return scopeCssRules(themeMapped, CUSTOM_HOME_SCOPE)
 }
@@ -190,7 +245,7 @@ export function extractInlineHomeHtml(documentHtml: string): string {
   const doc = parser.parseFromString(documentHtml, 'text/html')
   doc.querySelector('header')?.remove()
 
-  const styles = Array.from(doc.querySelectorAll('style'))
+  const styles = [...doc.querySelectorAll('style')]
     .map((el) => el.textContent ?? '')
     .filter(Boolean)
     .join('\n')

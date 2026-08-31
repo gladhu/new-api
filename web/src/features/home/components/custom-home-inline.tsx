@@ -19,11 +19,16 @@ For commercial licensing, please contact support@quantumnous.com
 import DOMPurify from 'dompurify'
 import { useMemo, useRef } from 'react'
 
-import { useStatus } from '@/hooks/use-status'
+import { getCachedStatus, useStatus } from '@/hooks/use-status'
 import { cn } from '@/lib/utils'
 
 import { useCustomHomeInteractions } from '../hooks/use-custom-home-interactions'
-import { scopeCustomHomeStyles } from '../lib/custom-home-html'
+import {
+  applyHomeServerAddress,
+  readStatusServerAddress,
+  resolveDisplayServerAddress,
+  scopeCustomHomeStyles,
+} from '../lib/custom-home-html'
 
 interface CustomHomeInlineProps {
   html: string
@@ -41,11 +46,11 @@ function splitCustomHomeHtml(html: string): { styles: string; body: string } {
 export function CustomHomeInline(props: CustomHomeInlineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { status } = useStatus()
-  useCustomHomeInteractions(
-    containerRef,
-    props.html,
-    status?.server_address as string | undefined
+  const displayAddress = resolveDisplayServerAddress(
+    readStatusServerAddress(status as Record<string, unknown> | null) ??
+      readStatusServerAddress(getCachedStatus())
   )
+  useCustomHomeInteractions(containerRef, props.html, displayAddress)
 
   const { styles, body } = useMemo(() => {
     const split = splitCustomHomeHtml(props.html)
@@ -55,7 +60,11 @@ export function CustomHomeInline(props: CustomHomeInlineProps) {
     }
   }, [props.html])
 
-  const sanitizedBody = useMemo(() => DOMPurify.sanitize(body), [body])
+  const sanitizedBody = useMemo(
+    () =>
+      applyHomeServerAddress(DOMPurify.sanitize(body), displayAddress),
+    [body, displayAddress]
+  )
 
   return (
     <div className={cn('custom-home-content', props.className)}>

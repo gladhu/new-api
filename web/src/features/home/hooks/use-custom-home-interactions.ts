@@ -18,6 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { type RefObject, useLayoutEffect } from 'react'
 import { getCachedStatus } from '@/hooks/use-status'
+import {
+  readStatusServerAddress,
+  resolveDisplayServerAddress,
+} from '../lib/custom-home-html'
 
 const API_ENDPOINTS = [
   '/v1/chat/completions',
@@ -40,7 +44,7 @@ const ROTATE_INTERVAL_MS = 3000
 export function useCustomHomeInteractions(
   containerRef: RefObject<HTMLElement | null>,
   html: string,
-  serverAddress?: string | null
+  displayAddress: string
 ) {
   useLayoutEffect(() => {
     const root = containerRef.current
@@ -60,15 +64,14 @@ export function useCustomHomeInteractions(
     let copyResetTimer: ReturnType<typeof setTimeout> | undefined
     let rotateTimer: ReturnType<typeof setInterval> | undefined
 
-    const defaultServerAddress = () =>
-      window.location.origin.replace(/\/$/, '')
+    const resolvedAddress =
+      displayAddress.trim() ||
+      resolveDisplayServerAddress(readStatusServerAddress(getCachedStatus()))
 
-    const setServerAddress = (addr?: string | null) => {
-      if (!apiUrlInput) return
-      apiUrlInput.value =
-        addr && String(addr).trim()
-          ? String(addr).trim().replace(/\/$/, '')
-          : defaultServerAddress()
+    const setServerAddress = (addr: string) => {
+      if (!apiUrlInput || !addr) return
+      apiUrlInput.value = addr
+      apiUrlInput.setAttribute('value', addr)
     }
 
     const showEndpoint = (index: number) => {
@@ -121,8 +124,8 @@ export function useCustomHomeInteractions(
     }
 
     const copyServerAddress = () => {
-      if (!apiUrlInput) return
-      const text = apiUrlInput.value || defaultServerAddress()
+      const text = (apiUrlInput?.value || resolvedAddress).trim()
+      if (!text) return
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(text).then(onCopied).catch(() => {
           fallbackCopy(text, onCopied)
@@ -159,10 +162,6 @@ export function useCustomHomeInteractions(
     }
 
     if (apiUrlInput) {
-      const cachedAddress = getCachedStatus()?.server_address
-      const resolvedAddress =
-        serverAddress ??
-        (typeof cachedAddress === 'string' ? cachedAddress : undefined)
       setServerAddress(resolvedAddress)
     }
 
@@ -192,5 +191,5 @@ export function useCustomHomeInteractions(
       apiEndpointEl?.removeEventListener('wheel', onEndpointWheel)
       apiEndpointEl?.removeEventListener('keydown', onEndpointKeyDown)
     }
-  }, [containerRef, html, serverAddress])
+  }, [containerRef, html, displayAddress])
 }
