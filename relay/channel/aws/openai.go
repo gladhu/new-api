@@ -27,6 +27,20 @@ func bedrockMantleResponsesURL(region string) string {
 	return fmt.Sprintf("https://bedrock-mantle.%s.api.aws/openai/v1/responses", region)
 }
 
+func bedrockRuntimeOpenAIResponsesURL(region string) string {
+	return fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/openai/v1/responses", region)
+}
+
+// bedrockOpenAIResponsesURL picks the OpenAI-compatible Responses endpoint.
+// Mantle only accepts raw IDs (openai.gpt-5.6-terra). Global/geo CRIS IDs
+// such as global.openai.gpt-5.6-terra exist only on bedrock-runtime.
+func bedrockOpenAIResponsesURL(region, model string) string {
+	if prefix, _ := common.SplitBedrockInferenceProfile(model); prefix != "" {
+		return bedrockRuntimeOpenAIResponsesURL(region)
+	}
+	return bedrockMantleResponsesURL(region)
+}
+
 func convertBedrockOpenAIResponsesRequest(infoModel string, request dto.OpenAIResponsesRequest) (dto.OpenAIResponsesRequest, string, error) {
 	if !common.IsBedrockOpenAIModel(request.Model) && !common.IsBedrockOpenAIModel(infoModel) {
 		return request, "", errors.New("not a Bedrock OpenAI model")

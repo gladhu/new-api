@@ -101,14 +101,20 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		if info.ChannelOtherSettings.AwsKeyType != dto.AwsKeyTypeApiKey {
 			return "", errors.New("Bedrock OpenAI models require API Key authentication (aws_key_type: api_key)")
 		}
-		// Mantle OpenAI models only expose /openai/v1/responses. Chat/completions
-		// callers are converted before DoRequest (TextHelper or ConvertOpenAIRequest).
+		// Chat/completions callers are converted to /openai/v1/responses
+		// before DoRequest (TextHelper or ConvertOpenAIRequest).
 		a.ClientMode = ClientModeApiKey
 		_, region, err := parseAwsApiKeyAndRegion(info.ApiKey)
 		if err != nil {
 			return "", err
 		}
-		return bedrockMantleResponsesURL(region), nil
+		model := info.UpstreamModelName
+		if prefix, _ := common.SplitBedrockInferenceProfile(model); prefix == "" {
+			if originPrefix, _ := common.SplitBedrockInferenceProfile(info.OriginModelName); originPrefix != "" {
+				model = info.OriginModelName
+			}
+		}
+		return bedrockOpenAIResponsesURL(region, model), nil
 	}
 
 	if info.ChannelOtherSettings.AwsKeyType == dto.AwsKeyTypeApiKey {

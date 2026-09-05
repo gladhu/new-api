@@ -68,6 +68,7 @@ var bedrockInferenceProfilePrefixes = []string{
 	"apac.",
 	"jp.",
 	"au.",
+	"in.",
 }
 
 // SplitBedrockInferenceProfile separates an AWS CRIS prefix from a model ID.
@@ -83,8 +84,8 @@ func SplitBedrockInferenceProfile(modelName string) (prefix, base string) {
 }
 
 // IsBedrockOpenAIModel reports whether the model is an OpenAI frontier model hosted on AWS Bedrock
-// (GPT-5.4 / GPT-5.5 / GPT-5.6), which only supports the OpenAI Responses API via bedrock-mantle endpoints.
-// Geographic/global inference profile IDs such as global.openai.gpt-5.6-terra are recognized.
+// (GPT-5.4 / GPT-5.5 / GPT-5.6). Unprefixed IDs use bedrock-mantle; CRIS IDs such as
+// global.openai.gpt-5.6-terra use bedrock-runtime.
 func IsBedrockOpenAIModel(modelName string) bool {
 	_, modelName = SplitBedrockInferenceProfile(modelName)
 	switch {

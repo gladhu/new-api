@@ -14,6 +14,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBedrockOpenAIResponsesURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		model string
+		want  string
+	}{
+		{model: "gpt-5.6-terra", want: "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"},
+		{model: "openai.gpt-5.6-terra", want: "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"},
+		{model: "global.openai.gpt-5.6-terra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
+		{model: "us.openai.gpt-5.6-terra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
+		{model: "in.openai.gpt-5.6-terra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, bedrockOpenAIResponsesURL("us-east-1", tt.model))
+		})
+	}
+}
+
 func TestGetRequestURL_BedrockOpenAIResponses(t *testing.T) {
 	t.Parallel()
 
@@ -364,7 +385,29 @@ func TestGetRequestURL_BedrockOpenAIGlobalMappedModel(t *testing.T) {
 
 	url, err := adaptor.GetRequestURL(info)
 	require.NoError(t, err)
-	assert.Equal(t, "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses", url)
+	assert.Equal(t, "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses", url)
+	assert.True(t, adaptor.IsBedrockOpenAI)
+}
+
+func TestGetRequestURL_BedrockOpenAIUSMappedModel(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeResponses,
+		OriginModelName: "gpt-5.6-terra",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ApiKey:            "bedrock-token|us-west-2",
+			UpstreamModelName: "us.openai.gpt-5.6-terra",
+			ChannelOtherSettings: dto.ChannelOtherSettings{
+				AwsKeyType: dto.AwsKeyTypeApiKey,
+			},
+		},
+	}
+
+	url, err := adaptor.GetRequestURL(info)
+	require.NoError(t, err)
+	assert.Equal(t, "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1/responses", url)
 	assert.True(t, adaptor.IsBedrockOpenAI)
 }
 

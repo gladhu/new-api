@@ -23,6 +23,7 @@ func TestIsBedrockOpenAIModel(t *testing.T) {
 		{model: "us.openai.gpt-5.6-terra", want: true},
 		{model: "global.openai.gpt-5.6-sol", want: true},
 		{model: "us.openai.gpt-5.6-luna", want: true},
+		{model: "in.openai.gpt-5.6-terra", want: true},
 		{model: "global.gpt-5.6-terra", want: true},
 		{model: "claude-sonnet-4-6", want: false},
 		{model: "gpt-4o", want: false},
