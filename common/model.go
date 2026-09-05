@@ -58,10 +58,35 @@ func IsOpenAITextModel(modelName string) bool {
 	return false
 }
 
+// bedrockInferenceProfilePrefixes are AWS cross-Region inference profile
+// prefixes. Global CRIS (~list price) uses "global."; geographic CRIS (US is
+// about 1.1x) uses a geography code such as "us.".
+var bedrockInferenceProfilePrefixes = []string{
+	"global.",
+	"us.",
+	"eu.",
+	"apac.",
+	"jp.",
+	"au.",
+}
+
+// SplitBedrockInferenceProfile separates an AWS CRIS prefix from a model ID.
+// Example: "global.openai.gpt-5.6-terra" → ("global.", "openai.gpt-5.6-terra").
+func SplitBedrockInferenceProfile(modelName string) (prefix, base string) {
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	for _, p := range bedrockInferenceProfilePrefixes {
+		if strings.HasPrefix(modelName, p) {
+			return p, strings.TrimPrefix(modelName, p)
+		}
+	}
+	return "", modelName
+}
+
 // IsBedrockOpenAIModel reports whether the model is an OpenAI frontier model hosted on AWS Bedrock
 // (GPT-5.4 / GPT-5.5 / GPT-5.6), which only supports the OpenAI Responses API via bedrock-mantle endpoints.
+// Geographic/global inference profile IDs such as global.openai.gpt-5.6-terra are recognized.
 func IsBedrockOpenAIModel(modelName string) bool {
-	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	_, modelName = SplitBedrockInferenceProfile(modelName)
 	switch {
 	case strings.HasPrefix(modelName, "openai.gpt-5.4"):
 		return true

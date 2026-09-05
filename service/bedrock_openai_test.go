@@ -33,6 +33,20 @@ func TestShouldBedrockOpenAIChatCompletionsCompat(t *testing.T) {
 			want:        true,
 		},
 		{
+			name:        "aws channel with global inference profile",
+			channelType: constant.ChannelTypeAws,
+			apiType:     constant.APITypeAws,
+			models:      []string{"global.openai.gpt-5.6-terra"},
+			want:        true,
+		},
+		{
+			name:        "aws channel with us inference profile",
+			channelType: constant.ChannelTypeAws,
+			apiType:     constant.APITypeAws,
+			models:      []string{"us.openai.gpt-5.6-terra"},
+			want:        true,
+		},
+		{
 			name:        "aws channel with custom alias and upstream model",
 			channelType: constant.ChannelTypeAws,
 			apiType:     constant.APITypeAws,

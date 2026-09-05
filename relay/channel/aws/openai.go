@@ -47,6 +47,13 @@ func convertBedrockOpenAIResponsesRequest(infoModel string, request dto.OpenAIRe
 		request.Model = originModel
 	}
 
+	// Channel model mapping may already point at a CRIS ID such as
+	// global.openai.gpt-5.6-terra. Prefer that over rewriting the friendly name
+	// back to openai.gpt-5.6-terra (US / in-region, ~1.1x).
+	if prefix, _ := common.SplitBedrockInferenceProfile(infoModel); prefix != "" {
+		request.Model = infoModel
+	}
+
 	request.Model = getAwsModelID(request.Model)
 	return request, effort, nil
 }

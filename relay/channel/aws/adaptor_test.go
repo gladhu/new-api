@@ -158,6 +158,9 @@ func TestConvertOpenAIResponsesRequest_BedrockMapsGpt56Family(t *testing.T) {
 		{in: "gpt-5.6-sol", want: "openai.gpt-5.6-sol"},
 		{in: "gpt-5.6-terra", want: "openai.gpt-5.6-terra"},
 		{in: "openai.gpt-5.6-luna", want: "openai.gpt-5.6-luna"},
+		{in: "global.openai.gpt-5.6-terra", want: "global.openai.gpt-5.6-terra"},
+		{in: "us.openai.gpt-5.6-terra", want: "us.openai.gpt-5.6-terra"},
+		{in: "global.gpt-5.6-terra", want: "global.openai.gpt-5.6-terra"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
@@ -296,6 +299,73 @@ func TestConvertOpenAIRequest_BedrockOpenAIChatCompletionsToResponses(t *testing
 	assert.Equal(t, relayconstant.RelayModeResponses, info.RelayMode)
 	assert.True(t, adaptor.IsBedrockOpenAI)
 	assert.NotEmpty(t, responsesReq.Input)
+}
+
+func TestConvertOpenAIResponsesRequest_PreservesMappedGlobalInferenceProfile(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "global.openai.gpt-5.6-terra",
+		},
+	}
+
+	converted, err := adaptor.ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{
+		Model: "global.openai.gpt-5.6-terra",
+		Input: json.RawMessage(`"hello"`),
+	})
+	require.NoError(t, err)
+
+	responsesReq, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Equal(t, "global.openai.gpt-5.6-terra", responsesReq.Model)
+	assert.Equal(t, "global.openai.gpt-5.6-terra", info.UpstreamModelName)
+	assert.True(t, adaptor.IsBedrockOpenAI)
+}
+
+func TestConvertOpenAIResponsesRequest_PrefersMappedGlobalProfileOverFriendlyName(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "global.openai.gpt-5.6-terra",
+		},
+	}
+
+	converted, err := adaptor.ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{
+		Model: "gpt-5.6-terra",
+		Input: json.RawMessage(`"hello"`),
+	})
+	require.NoError(t, err)
+
+	responsesReq, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Equal(t, "global.openai.gpt-5.6-terra", responsesReq.Model)
+	assert.Equal(t, "global.openai.gpt-5.6-terra", info.UpstreamModelName)
+}
+
+func TestGetRequestURL_BedrockOpenAIGlobalMappedModel(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeResponses,
+		OriginModelName: "gpt-5.6-terra",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ApiKey:            "bedrock-token|us-east-1",
+			UpstreamModelName: "global.openai.gpt-5.6-terra",
+			ChannelOtherSettings: dto.ChannelOtherSettings{
+				AwsKeyType: dto.AwsKeyTypeApiKey,
+			},
+		},
+	}
+
+	url, err := adaptor.GetRequestURL(info)
+	require.NoError(t, err)
+	assert.Equal(t, "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses", url)
+	assert.True(t, adaptor.IsBedrockOpenAI)
 }
 
 func TestGetModelList_IncludesBedrockOpenAIModels(t *testing.T) {

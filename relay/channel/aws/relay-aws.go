@@ -221,6 +221,12 @@ func getAwsModelID(requestModel string) string {
 	if awsModelIDName, ok := awsModelIDMap[requestModel]; ok {
 		return awsModelIDName
 	}
+	prefix, base := common.SplitBedrockInferenceProfile(requestModel)
+	if prefix != "" {
+		if mapped, ok := awsModelIDMap[base]; ok {
+			return prefix + mapped
+		}
+	}
 	return requestModel
 }
 
