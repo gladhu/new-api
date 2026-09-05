@@ -342,11 +342,12 @@ func writeAdminUserMonthlyBillCSV(w *csv.Writer, userId int, username string, ye
 }
 
 func writeAdminUserConsumptionDetailsCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
-	header := []string{"日志ID", "消费时间", "用户ID", "用户名", "模型名称", "令牌名称", "输入Token数", "输出Token数", "消耗额度", "消耗金额(USD)", "当前展示消耗金额", "耗时(秒)", "是否流式", "渠道ID", "渠道名称", "分组", "IP", "请求ID", "日志内容", "其他信息"}
+	header := []string{"日志ID", "消费时间", "用户ID", "用户名", "模型名称", "令牌名称", "输入Token数", "输出Token数", "cache_creation", "cache_read", "cache_write", "消耗额度", "消耗金额(USD)", "当前展示消耗金额", "耗时(秒)", "是否流式", "渠道ID", "渠道名称", "分组", "IP", "请求ID", "日志内容", "其他信息"}
 	_ = w.Write(header)
 	for _, lg := range logs {
 		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
 		quota := int64(lg.Quota)
+		cache := parseUsageLogCacheCounts(lg.Other)
 		_ = w.Write([]string{
 			strconv.Itoa(lg.Id),
 			ts,
@@ -356,6 +357,9 @@ func writeAdminUserConsumptionDetailsCSV(w *csv.Writer, logs []*model.Log, loc *
 			lg.TokenName,
 			strconv.Itoa(lg.PromptTokens),
 			strconv.Itoa(lg.CompletionTokens),
+			strconv.Itoa(cache.Creation),
+			strconv.Itoa(cache.Read),
+			strconv.Itoa(cache.Write),
 			strconv.Itoa(lg.Quota),
 			adminUserExportFormatAmount(adminUserExportAmountUSD(quota)),
 			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),

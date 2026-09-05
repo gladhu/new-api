@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,13 +48,15 @@ func parseLogExportLocation(c *gin.Context) *time.Location {
 func writeAdminUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
 	header := []string{
 		"日志ID", "时间", "日志类型", "用户ID", "用户名", "模型名称", "令牌名称",
-		"输入Token数", "输出Token数", "额度", "金额(USD)", "花费",
+		"输入Token数", "输出Token数", "cache_creation", "cache_read", "cache_write",
+		"额度", "金额(USD)", "花费",
 		"耗时(秒)", "是否流式", "渠道ID", "渠道名称", "分组", "IP", "请求ID", "日志内容", "其他信息",
 	}
 	_ = w.Write(header)
 	for _, lg := range logs {
 		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
 		quota := int64(lg.Quota)
+		cache := parseUsageLogCacheCounts(lg.Other)
 		_ = w.Write([]string{
 			strconv.Itoa(lg.Id),
 			ts,
@@ -64,6 +67,9 @@ func writeAdminUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Lo
 			lg.TokenName,
 			strconv.Itoa(lg.PromptTokens),
 			strconv.Itoa(lg.CompletionTokens),
+			strconv.Itoa(cache.Creation),
+			strconv.Itoa(cache.Read),
+			strconv.Itoa(cache.Write),
 			strconv.Itoa(lg.Quota),
 			adminUserExportFormatAmount(adminUserExportAmountUSD(quota)),
 			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),
@@ -86,13 +92,15 @@ func writeAdminUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Lo
 func writeUserUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
 	header := []string{
 		"时间", "日志类型", "令牌名称", "分组", "模型名称",
-		"输入Token数", "输出Token数", "额度", "花费",
+		"输入Token数", "输出Token数", "cache_creation", "cache_read", "cache_write",
+		"额度", "花费",
 		"耗时(秒)", "是否流式", "IP", "请求ID", "日志内容",
 	}
 	_ = w.Write(header)
 	for _, lg := range logs {
 		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
 		quota := int64(lg.Quota)
+		cache := parseUsageLogCacheCounts(lg.Other)
 		ip := ""
 		if (lg.Type == model.LogTypeConsume || lg.Type == model.LogTypeError) && lg.Ip != "" {
 			ip = lg.Ip
@@ -105,6 +113,9 @@ func writeUserUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Loc
 			lg.ModelName,
 			strconv.Itoa(lg.PromptTokens),
 			strconv.Itoa(lg.CompletionTokens),
+			strconv.Itoa(cache.Creation),
+			strconv.Itoa(cache.Read),
+			strconv.Itoa(cache.Write),
 			strconv.Itoa(lg.Quota),
 			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),
 			strconv.Itoa(lg.UseTime),
@@ -158,4 +169,61 @@ func ExportUserLogs(c *gin.Context) {
 	userId := c.GetInt("id")
 	filter := parseLogExportFilter(c, userId, false)
 	respondUsageLogsExport(c, filter)
+}
+
+type usageLogCacheCounts struct {
+	Creation int
+	Read     int
+	Write    int
+}
+
+// parseUsageLogCacheCounts reads cache token fields from a usage-log Other JSON.
+// cache_read comes from cache_tokens; cache_creation from cache_creation_tokens;
+// cache_write prefers cache_write_tokens, then the 5m/1h split, then cache_creation.
+func parseUsageLogCacheCounts(otherJSON string) usageLogCacheCounts {
+	other, err := common.StrToMap(otherJSON)
+	if err != nil || other == nil {
+		return usageLogCacheCounts{}
+	}
+	creation := usageLogOtherInt(other, "cache_creation_tokens")
+	read := usageLogOtherInt(other, "cache_tokens")
+	write := usageLogOtherInt(other, "cache_write_tokens")
+	if write == 0 {
+		write5m := usageLogOtherInt(other, "cache_creation_tokens_5m")
+		write1h := usageLogOtherInt(other, "cache_creation_tokens_1h")
+		if write5m > 0 || write1h > 0 {
+			write = write5m + write1h
+			if creation > write {
+				write = creation
+			}
+		} else {
+			write = creation
+		}
+	}
+	return usageLogCacheCounts{Creation: creation, Read: read, Write: write}
+}
+
+func usageLogOtherInt(other map[string]interface{}, key string) int {
+	v, ok := other[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil {
+			return 0
+		}
+		return int(i)
+	default:
+		return 0
+	}
 }
