@@ -36,10 +36,25 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 	}
 	session, apiErr := NewBillingSession(c, relayInfo, preConsumedQuota)
 	if apiErr != nil {
+		recordTokenQuotaPreConsumeError(c, relayInfo, apiErr)
 		return apiErr
 	}
 	relayInfo.Billing = session
 	return nil
+}
+
+func recordTokenQuotaPreConsumeError(c *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) {
+	if relayInfo == nil || apiErr == nil || apiErr.GetErrorCode() != types.ErrorCodePreConsumeTokenQuotaFailed {
+		return
+	}
+	if c != nil && c.GetString("original_model") == "" && relayInfo.OriginModelName != "" {
+		c.Set("original_model", relayInfo.OriginModelName)
+	}
+	remainQuota := 0
+	if c != nil {
+		remainQuota = c.GetInt("token_quota")
+	}
+	RecordTokenQuotaErrorLog(c, apiErr, relayInfo.UserId, remainQuota)
 }
 
 // ---------------------------------------------------------------------------

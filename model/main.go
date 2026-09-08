@@ -27,6 +27,11 @@ var commonFalseVal string
 var logKeyCol string
 var logGroupCol string
 
+// InitColumnNames initializes reserved-word column quoting for the current database type.
+func InitColumnNames() {
+	initCol()
+}
+
 func initCol() {
 	// init common column names
 	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {

@@ -419,6 +419,9 @@ func TokenAuth() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusInternalServerError,
 					common.TranslateMessage(c, i18n.MsgDatabaseError))
 			} else {
+				if errors.Is(err, model.ErrTokenExhausted) && token != nil {
+					recordTokenQuotaExhaustedErrorLog(c, token)
+				}
 				abortWithOpenAiMessage(c, http.StatusUnauthorized,
 					common.TranslateMessage(c, i18n.MsgTokenInvalid))
 			}
@@ -523,4 +526,23 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 		}
 	}
 	return nil
+}
+
+func recordTokenQuotaExhaustedErrorLog(c *gin.Context, token *model.Token) {
+	userCache, cacheErr := model.GetUserCache(token.UserId)
+	if cacheErr != nil || userCache == nil || userCache.Quota <= 0 {
+		return
+	}
+	userCache.WriteContext(c)
+	c.Set("token_id", token.Id)
+	c.Set("token_name", token.Name)
+	if token.Group != "" {
+		c.Set("group", token.Group)
+	}
+	service.RecordTokenQuotaErrorLog(c, types.NewErrorWithStatusCode(
+		fmt.Errorf("token quota is not enough, token remain quota: %s", logger.FormatQuota(token.RemainQuota)),
+		types.ErrorCodePreConsumeTokenQuotaFailed,
+		http.StatusForbidden,
+		types.ErrOptionWithSkipRetry(),
+	), token.UserId, token.RemainQuota)
 }
