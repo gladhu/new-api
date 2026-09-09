@@ -83,25 +83,41 @@ func SplitBedrockInferenceProfile(modelName string) (prefix, base string) {
 	return "", modelName
 }
 
-// IsBedrockOpenAIModel reports whether the model is an OpenAI frontier model hosted on AWS Bedrock
-// (GPT-5.4 / GPT-5.5 / GPT-5.6). Unprefixed IDs use bedrock-mantle; CRIS IDs such as
-// global.openai.gpt-5.6-terra use bedrock-runtime.
+// IsBedrockOpenAIModel reports whether the model is an OpenAI frontier model
+// hosted on AWS Bedrock (Responses API via bedrock-mantle / bedrock-runtime).
+//
+// Matching is version-based so new Bedrock OpenAI models do not need a
+// per-ID whitelist:
+//   - gpt-5.4 and later 5.x (gpt-5.4, gpt-5.5, gpt-5.6-luna, ...)
+//   - gpt-6 and later generations (gpt-6-astra, ...)
+// CRIS prefixes (global./us./...) and the openai. provider prefix are ignored.
+// gpt-oss remains excluded (different Bedrock product, not Mantle Responses).
 func IsBedrockOpenAIModel(modelName string) bool {
 	_, modelName = SplitBedrockInferenceProfile(modelName)
-	switch {
-	case strings.HasPrefix(modelName, "openai.gpt-5.4"):
-		return true
-	case strings.HasPrefix(modelName, "openai.gpt-5.5"):
-		return true
-	case strings.HasPrefix(modelName, "openai.gpt-5.6"):
-		return true
-	case strings.HasPrefix(modelName, "gpt-5.4"):
-		return true
-	case strings.HasPrefix(modelName, "gpt-5.5"):
-		return true
-	case strings.HasPrefix(modelName, "gpt-5.6"):
-		return true
-	default:
+	modelName = strings.TrimPrefix(modelName, "openai.")
+	if !strings.HasPrefix(modelName, "gpt-") || strings.HasPrefix(modelName, "gpt-oss") {
 		return false
 	}
+
+	rest := modelName[len("gpt-"):]
+	major, i := 0, 0
+	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+		major = major*10 + int(rest[i]-'0')
+		i++
+	}
+	if i == 0 {
+		return false
+	}
+	if major >= 6 {
+		return true
+	}
+	if major != 5 || i >= len(rest) || rest[i] != '.' {
+		return false
+	}
+	minor, j := 0, i+1
+	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+		minor = minor*10 + int(rest[j]-'0')
+		j++
+	}
+	return j > i+1 && minor >= 4
 }

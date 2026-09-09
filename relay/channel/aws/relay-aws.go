@@ -227,6 +227,14 @@ func getAwsModelID(requestModel string) string {
 			return prefix + mapped
 		}
 	}
+	// Bedrock OpenAI frontier IDs are openai.<friendly-name>.
+	// Keep this generic so new models do not need awsModelIDMap entries.
+	if common.IsBedrockOpenAIModel(requestModel) {
+		if strings.HasPrefix(base, "openai.") {
+			return prefix + base
+		}
+		return prefix + "openai." + base
+	}
 	return requestModel
 }
 

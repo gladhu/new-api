@@ -22,7 +22,9 @@ func TestBedrockOpenAIResponsesURL(t *testing.T) {
 		want  string
 	}{
 		{model: "gpt-5.6-terra", want: "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"},
+		{model: "gpt-6-astra", want: "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"},
 		{model: "openai.gpt-5.6-terra", want: "https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses"},
+		{model: "global.openai.gpt-6-astra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
 		{model: "global.openai.gpt-5.6-terra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
 		{model: "us.openai.gpt-5.6-terra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
 		{model: "in.openai.gpt-5.6-terra", want: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/responses"},
@@ -178,6 +180,11 @@ func TestConvertOpenAIResponsesRequest_BedrockMapsGpt56Family(t *testing.T) {
 		{in: "gpt-5.6-luna", want: "openai.gpt-5.6-luna"},
 		{in: "gpt-5.6-sol", want: "openai.gpt-5.6-sol"},
 		{in: "gpt-5.6-terra", want: "openai.gpt-5.6-terra"},
+		{in: "gpt-6-astra", want: "openai.gpt-6-astra"},
+		{in: "openai.gpt-6-astra", want: "openai.gpt-6-astra"},
+		{in: "global.openai.gpt-6-astra", want: "global.openai.gpt-6-astra"},
+		{in: "global.gpt-6-astra", want: "global.openai.gpt-6-astra"},
+		{in: "gpt-7-foo", want: "openai.gpt-7-foo"},
 		{in: "openai.gpt-5.6-luna", want: "openai.gpt-5.6-luna"},
 		{in: "global.openai.gpt-5.6-terra", want: "global.openai.gpt-5.6-terra"},
 		{in: "us.openai.gpt-5.6-terra", want: "us.openai.gpt-5.6-terra"},
@@ -421,4 +428,5 @@ func TestGetModelList_IncludesBedrockOpenAIModels(t *testing.T) {
 	require.Contains(t, models, "gpt-5.6-luna")
 	require.Contains(t, models, "gpt-5.6-sol")
 	require.Contains(t, models, "gpt-5.6-terra")
+	require.Contains(t, models, "gpt-6-astra")
 }

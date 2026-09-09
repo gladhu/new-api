@@ -36,15 +36,18 @@ var awsModelIDMap = map[string]string{
 	"gpt-5.6-sol":         "openai.gpt-5.6-sol",
 	"gpt-5.6-terra":       "openai.gpt-5.6-terra",
 	"gpt-5.6-luna":        "openai.gpt-5.6-luna",
+	"gpt-6-astra":         "openai.gpt-6-astra",
 	"openai.gpt-5.4":      "openai.gpt-5.4",
 	"openai.gpt-5.5":      "openai.gpt-5.5",
 	"openai.gpt-5.6":      "openai.gpt-5.6",
 	"openai.gpt-5.6-sol":  "openai.gpt-5.6-sol",
 	"openai.gpt-5.6-terra": "openai.gpt-5.6-terra",
 	"openai.gpt-5.6-luna": "openai.gpt-5.6-luna",
+	"openai.gpt-6-astra":  "openai.gpt-6-astra",
 }
 
-// BedrockOpenAIModels lists friendly model names for OpenAI frontier models on AWS Bedrock.
+// BedrockOpenAIModels lists known friendly names for the AWS channel picker.
+// Routing does not depend on this list; IsBedrockOpenAIModel matches by version.
 var BedrockOpenAIModels = []string{
 	"gpt-5.4",
 	"gpt-5.5",
@@ -52,6 +55,7 @@ var BedrockOpenAIModels = []string{
 	"gpt-5.6-sol",
 	"gpt-5.6-terra",
 	"gpt-5.6-luna",
+	"gpt-6-astra",
 }
 
 var awsModelCanCrossRegionMap = map[string]map[string]bool{
