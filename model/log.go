@@ -632,7 +632,7 @@ func applyLogListFilters(tx *gorm.DB, f LogListFilter) (*gorm.DB, error) {
 }
 
 // GetLogsForExport returns logs matching filters up to maxRows (ordered by id desc).
-func GetLogsForExport(f LogListFilter, maxRows int) (logs []*Log, total int64, err error) {
+func GetLogsForExport(ctx context.Context, f LogListFilter, maxRows int) (logs []*Log, total int64, err error) {
 	if maxRows <= 0 {
 		maxRows = adminUserLogExportMaxRows
 	}
@@ -641,14 +641,19 @@ func GetLogsForExport(f LogListFilter, maxRows int) (logs []*Log, total int64, e
 	if err != nil {
 		return nil, 0, err
 	}
+	countStarted := time.Now()
 	if err = tx.Count(&total).Error; err != nil {
+		logUsageExportStage(ctx, "count", 0, time.Since(countStarted))
 		common.SysError("failed to count logs for export: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
 	}
+	logUsageExportStage(ctx, "count", total, time.Since(countStarted))
 	if total > int64(maxRows) {
 		return nil, total, fmt.Errorf("记录数超过导出上限 %d 条，请缩小筛选范围", maxRows)
 	}
+	queryStarted := time.Now()
 	err = tx.Select(usageLogExportColumns).Order("logs.id desc").Limit(maxRows).Find(&logs).Error
+	logUsageExportStage(ctx, "query", int64(len(logs)), time.Since(queryStarted))
 	if err != nil {
 		common.SysError("failed to query logs for export: " + err.Error())
 		return nil, total, errors.New("查询日志失败")
@@ -670,21 +675,30 @@ func AdminUserMonthRangeSeconds(year, month int, loc *time.Location) (startSec, 
 }
 
 // GetUserConsumeLogsForAdminExport returns consume logs in [startTimestamp, endTimestamp] ordered by id ascending.
-func GetUserConsumeLogsForAdminExport(userId int, startTimestamp, endTimestamp int64) (logs []*Log, err error) {
+func GetUserConsumeLogsForAdminExport(ctx context.Context, userId int, startTimestamp, endTimestamp int64) (logs []*Log, err error) {
 	tx := LOG_DB.Where("logs.user_id = ? AND logs.type = ?", userId, LogTypeConsume).
 		Where("logs.created_at >= ? AND logs.created_at <= ?", startTimestamp, endTimestamp)
 	var total int64
+	countStarted := time.Now()
 	if err = tx.Model(&Log{}).Count(&total).Error; err != nil {
+		logUsageExportStage(ctx, "count", 0, time.Since(countStarted))
 		return nil, err
 	}
+	logUsageExportStage(ctx, "count", total, time.Since(countStarted))
 	if total > adminUserLogExportMaxRows {
 		return nil, fmt.Errorf("记录数超过导出上限 %d 条，请缩小时间范围", adminUserLogExportMaxRows)
 	}
+	queryStarted := time.Now()
 	err = tx.Select(usageLogExportColumns).Order("logs.id asc").Find(&logs).Error
+	logUsageExportStage(ctx, "query", int64(len(logs)), time.Since(queryStarted))
 	if err != nil {
 		return nil, err
 	}
 	return logs, nil
+}
+
+func logUsageExportStage(ctx context.Context, stage string, rows int64, elapsed time.Duration) {
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=%s rows=%d elapsed=%s", stage, rows, elapsed.Round(time.Millisecond)))
 }
 
 type AdminUserMonthLogTypeAgg struct {

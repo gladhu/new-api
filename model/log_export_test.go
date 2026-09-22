@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -37,7 +38,7 @@ func TestGetLogsForExport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	logs, total, err := GetLogsForExport(LogListFilter{
+	logs, total, err := GetLogsForExport(context.Background(), LogListFilter{
 		LogType:        LogTypeConsume,
 		StartTimestamp: base,
 		EndTimestamp:   base + 1000,
@@ -50,7 +51,7 @@ func TestGetLogsForExport(t *testing.T) {
 		t.Fatalf("want 2 consume logs, got total=%d len=%d", total, len(logs))
 	}
 
-	_, total, err = GetLogsForExport(LogListFilter{
+	_, total, err = GetLogsForExport(context.Background(), LogListFilter{
 		UserId:         1,
 		LogType:        LogTypeUnknown,
 		StartTimestamp: base,

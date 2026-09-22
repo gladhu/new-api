@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
@@ -394,14 +395,20 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 		return
 	}
 
-	logs, err := model.GetUserConsumeLogsForAdminExport(userId, startSec, endSec)
+	started := time.Now()
+	logger.LogInfo(c, fmt.Sprintf("usage log export stage=start user_id=%d", userId))
+	logs, err := model.GetUserConsumeLogsForAdminExport(c, userId, startSec, endSec)
 	if err != nil {
+		logUsageExportStage(c, "done", 0, time.Since(started))
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 
+	buildStarted := time.Now()
 	file, err := newUsageLogsWorkbook(logs, loc)
+	logUsageExportStage(c, "workbook", len(logs), time.Since(buildStarted))
 	if err != nil {
+		logUsageExportStage(c, "done", len(logs), time.Since(started))
 		common.ApiError(c, err)
 		return
 	}
@@ -411,7 +418,13 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 	filename := adminUserConsumptionDetailsFilename(userId, username, year, month)
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
 	c.Status(http.StatusOK)
-	_ = file.Write(c.Writer)
+	writeStarted := time.Now()
+	err = file.Write(c.Writer)
+	logUsageExportStage(c, "write", len(logs), time.Since(writeStarted))
+	logUsageExportStage(c, "done", len(logs), time.Since(started))
+	if err != nil {
+		logger.LogInfo(c, "usage log export stage=write error="+err.Error())
+	}
 }
 
 // ExportAdminUserMonthlyBillAndConsumptionDetails ZIP: 同时导出月账单摘要与消费明细。
@@ -438,8 +451,11 @@ func ExportAdminUserMonthlyBillAndConsumptionDetails(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	logs, err := model.GetUserConsumeLogsForAdminExport(userId, startSec, endSec)
+	started := time.Now()
+	logger.LogInfo(c, fmt.Sprintf("usage log export stage=start user_id=%d", userId))
+	logs, err := model.GetUserConsumeLogsForAdminExport(c, userId, startSec, endSec)
 	if err != nil {
+		logUsageExportStage(c, "done", 0, time.Since(started))
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -465,7 +481,9 @@ func ExportAdminUserMonthlyBillAndConsumptionDetails(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	if err = writeUsageLogsXLSX(detailsFile, logs, loc); err != nil {
+	if err = writeUsageLogsXLSX(c, detailsFile, logs, loc); err != nil {
+		logUsageExportStage(c, "done", len(logs), time.Since(started))
 		return
 	}
+	logUsageExportStage(c, "done", len(logs), time.Since(started))
 }

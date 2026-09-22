@@ -48,7 +48,7 @@ func TestWriteUsageLogsXLSX_slimColumns(t *testing.T) {
 			}`,
 		},
 	}
-	require.NoError(t, writeUsageLogsXLSX(&buf, logs, time.UTC))
+	require.NoError(t, writeUsageLogsXLSX(t.Context(), &buf, logs, time.UTC))
 
 	file, err := excelize.OpenReader(bytes.NewReader(buf.Bytes()))
 	require.NoError(t, err)

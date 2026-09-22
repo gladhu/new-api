@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"time"
@@ -34,13 +35,18 @@ var usageLogExportHeaders = []interface{}{
 	"cost",
 }
 
-func writeUsageLogsXLSX(w io.Writer, logs []*model.Log, loc *time.Location) error {
+func writeUsageLogsXLSX(ctx context.Context, w io.Writer, logs []*model.Log, loc *time.Location) error {
+	buildStarted := time.Now()
 	file, err := newUsageLogsWorkbook(logs, loc)
+	logUsageExportStage(ctx, "workbook", len(logs), time.Since(buildStarted))
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	return file.Write(w)
+	writeStarted := time.Now()
+	err = file.Write(w)
+	logUsageExportStage(ctx, "write", len(logs), time.Since(writeStarted))
+	return err
 }
 
 func newUsageLogsWorkbook(logs []*model.Log, loc *time.Location) (*excelize.File, error) {
