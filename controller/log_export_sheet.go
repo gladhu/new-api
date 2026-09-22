@@ -1,12 +1,17 @@
 package controller
 
 import (
+	"archive/zip"
+	"bytes"
+	"compress/flate"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
@@ -43,9 +48,33 @@ func writeUsageLogsXLSX(ctx context.Context, w io.Writer, logs []*model.Log, loc
 		return err
 	}
 	defer file.Close()
-	writeStarted := time.Now()
-	err = file.Write(w)
-	logUsageExportStage(ctx, "write", len(logs), time.Since(writeStarted))
+	buf, err := packUsageLogsXLSX(ctx, file, len(logs))
+	if err != nil {
+		return err
+	}
+	return sendPackedUsageLogsXLSX(ctx, w, buf, len(logs))
+}
+
+// packUsageLogsXLSX compresses the workbook into memory. BestSpeed is used
+// because the default deflate level dominates export time on large sheets.
+func packUsageLogsXLSX(ctx context.Context, file *excelize.File, rows int) (*bytes.Buffer, error) {
+	file.SetZipWriter(func(w io.Writer) excelize.ZipWriter {
+		zw := zip.NewWriter(w)
+		zw.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
+			return flate.NewWriter(out, flate.BestSpeed)
+		})
+		return zw
+	})
+	generateStarted := time.Now()
+	buf, err := file.WriteToBuffer()
+	logUsageExportStage(ctx, "generate", rows, time.Since(generateStarted))
+	return buf, err
+}
+
+func sendPackedUsageLogsXLSX(ctx context.Context, w io.Writer, buf *bytes.Buffer, rows int) error {
+	downloadStarted := time.Now()
+	n, err := buf.WriteTo(w)
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download rows=%d bytes=%d elapsed=%s", rows, n, time.Since(downloadStarted).Round(time.Millisecond)))
 	return err
 }
 

@@ -74,15 +74,19 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	}
 	defer file.Close()
 
+	buf, err := packUsageLogsXLSX(c, file, len(logs))
+	if err != nil {
+		logUsageExportStage(c, "done", len(logs), time.Since(started))
+		common.ApiError(c, err)
+		return
+	}
 	filename := "usage-logs-" + time.Now().In(loc).Format("20060102-150405") + ".xlsx"
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
 	c.Status(http.StatusOK)
-	writeStarted := time.Now()
-	err = file.Write(c.Writer)
-	logUsageExportStage(c, "write", len(logs), time.Since(writeStarted))
+	err = sendPackedUsageLogsXLSX(c, c.Writer, buf, len(logs))
 	logUsageExportStage(c, "done", len(logs), time.Since(started))
 	if err != nil {
-		logger.LogInfo(c, "usage log export stage=write error="+err.Error())
+		logger.LogInfo(c, "usage log export stage=download error="+err.Error())
 	}
 }
 
