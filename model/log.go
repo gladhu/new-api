@@ -565,7 +565,7 @@ func fillLogChannelNames(logs []*Log) error {
 	return nil
 }
 
-const adminUserLogExportMaxRows = 100000
+const adminUserLogExportMaxRows = 1000000
 
 // LogListFilter describes list/export query filters for usage logs.
 type LogListFilter struct {
