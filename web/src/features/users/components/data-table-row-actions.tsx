@@ -226,7 +226,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
               setBillExportOpen(true)
             }}
           >
-            {t('Export usage CSV')}
+            {t('Export usage')}
             <DropdownMenuShortcut>
               <FileDown size={16} />
             </DropdownMenuShortcut>

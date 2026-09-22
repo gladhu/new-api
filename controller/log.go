@@ -158,7 +158,6 @@ func GetLogsSelfStat(c *gin.Context) {
 	return
 }
 
-
 func parseAdminUserExportMonthQuery(c *gin.Context) (userId int, year int, month int, loc *time.Location, err error) {
 	userId, err = strconv.Atoi(c.Query("user_id"))
 	if err != nil || userId <= 0 {
@@ -341,40 +340,8 @@ func writeAdminUserMonthlyBillCSV(w *csv.Writer, userId int, username string, ye
 	w.Flush()
 }
 
-func writeAdminUserConsumptionDetailsCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
-	header := []string{"日志ID", "消费时间", "用户ID", "用户名", "模型名称", "令牌名称", "输入Token数", "输出Token数", "cache_creation", "cache_read", "cache_write", "消耗额度", "消耗金额(USD)", "当前展示消耗金额", "耗时(秒)", "是否流式", "渠道ID", "渠道名称", "分组", "IP", "请求ID", "日志内容", "其他信息"}
-	_ = w.Write(header)
-	for _, lg := range logs {
-		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
-		quota := int64(lg.Quota)
-		cache := parseUsageLogCacheCounts(lg.Other)
-		_ = w.Write([]string{
-			strconv.Itoa(lg.Id),
-			ts,
-			strconv.Itoa(lg.UserId),
-			lg.Username,
-			lg.ModelName,
-			lg.TokenName,
-			strconv.Itoa(lg.PromptTokens),
-			strconv.Itoa(lg.CompletionTokens),
-			strconv.Itoa(cache.Creation),
-			strconv.Itoa(cache.Read),
-			strconv.Itoa(cache.Write),
-			strconv.Itoa(lg.Quota),
-			adminUserExportFormatAmount(adminUserExportAmountUSD(quota)),
-			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),
-			strconv.Itoa(lg.UseTime),
-			adminUserExportBoolText(lg.IsStream),
-			strconv.Itoa(lg.ChannelId),
-			lg.ChannelName,
-			lg.Group,
-			lg.Ip,
-			lg.RequestId,
-			lg.Content,
-			lg.Other,
-		})
-	}
-	w.Flush()
+func adminUserConsumptionDetailsFilename(userId int, username string, year, month int) string {
+	return strings.TrimSuffix(adminUserExportFilename("consumption-details", userId, username, year, month), ".csv") + ".xlsx"
 }
 
 // ExportAdminUserMonthlyBill CSV: 月账单摘要（按日志类型汇总 + 按模型消费汇总）。
@@ -414,7 +381,7 @@ func ExportAdminUserMonthlyBill(c *gin.Context) {
 	writeAdminUserMonthlyBillCSV(w, userId, username, year, month, loc, startSec, endSec, typeRows, modelRows)
 }
 
-// ExportAdminUserConsumptionDetails CSV: 指定自然月内该用户的消费（调用）明细。
+// ExportAdminUserConsumptionDetails Excel: 指定自然月内该用户的消费（调用）明细。
 func ExportAdminUserConsumptionDetails(c *gin.Context) {
 	userId, year, month, loc, err := parseAdminUserExportMonthQuery(c)
 	if err != nil {
@@ -433,16 +400,18 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 		return
 	}
 
-	username := adminUserExportUsername(userId)
-	filename := adminUserExportFilename("consumption-details", userId, username, year, month)
-	adminUserExportSetCSVHeaders(c, filename)
-	c.Status(http.StatusOK)
-
-	if _, err = c.Writer.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
+	file, err := newUsageLogsWorkbook(logs, loc)
+	if err != nil {
+		common.ApiError(c, err)
 		return
 	}
-	w := csv.NewWriter(c.Writer)
-	writeAdminUserConsumptionDetailsCSV(w, logs, loc)
+	defer file.Close()
+
+	username := adminUserExportUsername(userId)
+	filename := adminUserConsumptionDetailsFilename(userId, username, year, month)
+	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
+	c.Status(http.StatusOK)
+	_ = file.Write(c.Writer)
 }
 
 // ExportAdminUserMonthlyBillAndConsumptionDetails ZIP: 同时导出月账单摘要与消费明细。
@@ -491,12 +460,12 @@ func ExportAdminUserMonthlyBillAndConsumptionDetails(c *gin.Context) {
 	monthlyCSV := csv.NewWriter(monthlyFile)
 	writeAdminUserMonthlyBillCSV(monthlyCSV, userId, username, year, month, loc, startSec, endSec, typeRows, modelRows)
 
-	detailsFilename := adminUserExportFilename("consumption-details", userId, username, year, month)
+	detailsFilename := adminUserConsumptionDetailsFilename(userId, username, year, month)
 	detailsFile, err := zipWriter.Create(detailsFilename)
 	if err != nil {
 		return
 	}
-	_, _ = detailsFile.Write([]byte{0xEF, 0xBB, 0xBF})
-	detailsCSV := csv.NewWriter(detailsFile)
-	writeAdminUserConsumptionDetailsCSV(detailsCSV, logs, loc)
+	if err = writeUsageLogsXLSX(detailsFile, logs, loc); err != nil {
+		return
+	}
 }

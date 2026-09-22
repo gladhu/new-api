@@ -233,7 +233,7 @@ async function parseBlobErrorMessage(blob: Blob): Promise<string> {
 }
 
 /**
- * Download CSV (monthly bill summary or consumption line items) for a user.
+ * Download a monthly bill CSV, or consumption details as Excel, for a user.
  */
 export async function downloadAdminUserLogExport(
   kind: AdminUserLogExportKind,

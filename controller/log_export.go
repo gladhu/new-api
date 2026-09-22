@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -44,90 +43,6 @@ func parseLogExportLocation(c *gin.Context) *time.Location {
 	return loc
 }
 
-// Admin export: all operational fields (matches admin usage-log table + diagnostics).
-func writeAdminUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
-	header := []string{
-		"日志ID", "时间", "日志类型", "用户ID", "用户名", "模型名称", "令牌名称",
-		"输入Token数", "输出Token数", "cache_creation", "cache_read", "cache_write",
-		"额度", "金额(USD)", "花费",
-		"耗时(秒)", "是否流式", "渠道ID", "渠道名称", "分组", "IP", "请求ID", "日志内容", "其他信息",
-	}
-	_ = w.Write(header)
-	for _, lg := range logs {
-		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
-		quota := int64(lg.Quota)
-		cache := parseUsageLogCacheCounts(lg.Other)
-		_ = w.Write([]string{
-			strconv.Itoa(lg.Id),
-			ts,
-			adminUserExportLogTypeName(lg.Type),
-			strconv.Itoa(lg.UserId),
-			lg.Username,
-			lg.ModelName,
-			lg.TokenName,
-			strconv.Itoa(lg.PromptTokens),
-			strconv.Itoa(lg.CompletionTokens),
-			strconv.Itoa(cache.Creation),
-			strconv.Itoa(cache.Read),
-			strconv.Itoa(cache.Write),
-			strconv.Itoa(lg.Quota),
-			adminUserExportFormatAmount(adminUserExportAmountUSD(quota)),
-			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),
-			strconv.Itoa(lg.UseTime),
-			adminUserExportBoolText(lg.IsStream),
-			strconv.Itoa(lg.ChannelId),
-			lg.ChannelName,
-			lg.Group,
-			lg.Ip,
-			lg.RequestId,
-			lg.Content,
-			lg.Other,
-		})
-	}
-	w.Flush()
-}
-
-// User export: only fields visible on the non-admin usage-log page (both themes).
-// Excludes channel, user identity, log id, raw other JSON, USD-only column, admin diagnostics.
-func writeUserUsageLogsExportCSV(w *csv.Writer, logs []*model.Log, loc *time.Location) {
-	header := []string{
-		"时间", "日志类型", "令牌名称", "分组", "模型名称",
-		"输入Token数", "输出Token数", "cache_creation", "cache_read", "cache_write",
-		"额度", "花费",
-		"耗时(秒)", "是否流式", "IP", "请求ID", "日志内容",
-	}
-	_ = w.Write(header)
-	for _, lg := range logs {
-		ts := time.Unix(lg.CreatedAt, 0).In(loc).Format(time.RFC3339)
-		quota := int64(lg.Quota)
-		cache := parseUsageLogCacheCounts(lg.Other)
-		ip := ""
-		if (lg.Type == model.LogTypeConsume || lg.Type == model.LogTypeError) && lg.Ip != "" {
-			ip = lg.Ip
-		}
-		_ = w.Write([]string{
-			ts,
-			adminUserExportLogTypeName(lg.Type),
-			lg.TokenName,
-			lg.Group,
-			lg.ModelName,
-			strconv.Itoa(lg.PromptTokens),
-			strconv.Itoa(lg.CompletionTokens),
-			strconv.Itoa(cache.Creation),
-			strconv.Itoa(cache.Read),
-			strconv.Itoa(cache.Write),
-			strconv.Itoa(lg.Quota),
-			adminUserExportFormatAmount(adminUserExportDisplayAmount(quota)),
-			strconv.Itoa(lg.UseTime),
-			adminUserExportBoolText(lg.IsStream),
-			ip,
-			lg.RequestId,
-			lg.Content,
-		})
-	}
-	w.Flush()
-}
-
 func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	logs, _, err := model.GetLogsForExport(filter, 0)
 	if err != nil {
@@ -143,28 +58,26 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	}
 
 	loc := parseLogExportLocation(c)
-	filename := "usage-logs-" + time.Now().In(loc).Format("20060102-150405") + ".csv"
-	adminUserExportSetCSVHeaders(c, filename)
-	c.Status(http.StatusOK)
-
-	if _, err = c.Writer.Write([]byte{0xEF, 0xBB, 0xBF}); err != nil {
+	file, err := newUsageLogsWorkbook(logs, loc)
+	if err != nil {
+		common.ApiError(c, err)
 		return
 	}
-	w := csv.NewWriter(c.Writer)
-	if filter.ForAdmin {
-		writeAdminUsageLogsExportCSV(w, logs, loc)
-	} else {
-		writeUserUsageLogsExportCSV(w, logs, loc)
-	}
+	defer file.Close()
+
+	filename := "usage-logs-" + time.Now().In(loc).Format("20060102-150405") + ".xlsx"
+	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
+	c.Status(http.StatusOK)
+	_ = file.Write(c.Writer)
 }
 
-// ExportAllLogs exports filtered usage logs as CSV (admin).
+// ExportAllLogs exports filtered usage logs as Excel (admin).
 func ExportAllLogs(c *gin.Context) {
 	filter := parseLogExportFilter(c, 0, true)
 	respondUsageLogsExport(c, filter)
 }
 
-// ExportUserLogs exports filtered usage logs as CSV for the current user.
+// ExportUserLogs exports filtered usage logs as Excel for the current user.
 func ExportUserLogs(c *gin.Context) {
 	userId := c.GetInt("id")
 	filter := parseLogExportFilter(c, userId, false)
@@ -185,6 +98,10 @@ func parseUsageLogCacheCounts(otherJSON string) usageLogCacheCounts {
 	if err != nil || other == nil {
 		return usageLogCacheCounts{}
 	}
+	return usageLogCacheCountsFromMap(other)
+}
+
+func usageLogCacheCountsFromMap(other map[string]interface{}) usageLogCacheCounts {
 	creation := usageLogOtherInt(other, "cache_creation_tokens")
 	read := usageLogOtherInt(other, "cache_tokens")
 	write := usageLogOtherInt(other, "cache_write_tokens")

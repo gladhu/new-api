@@ -19,7 +19,7 @@ function triggerBlobDownload(blob: Blob, contentDisposition: string) {
   const filename =
     (utf8Match?.[1] ? decodeURIComponent(utf8Match[1]) : undefined) ||
     fallbackMatch?.[1] ||
-    `usage-logs-${Date.now()}.csv`
+    `usage-logs-${Date.now()}.xlsx`
 
   const url = URL.createObjectURL(blob)
   try {
@@ -36,7 +36,7 @@ function triggerBlobDownload(blob: Blob, contentDisposition: string) {
 }
 
 /**
- * Download usage logs CSV using the same filters as the list API.
+ * Download usage logs Excel using the same filters as the list API.
  */
 export async function downloadUsageLogsExport(
   params: Omit<GetLogsParams, 'p' | 'page_size'>,

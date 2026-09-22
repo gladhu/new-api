@@ -567,6 +567,9 @@ func fillLogChannelNames(logs []*Log) error {
 
 const adminUserLogExportMaxRows = 1000000
 
+// usageLogExportColumns are the only log fields needed to build the slim Excel export.
+const usageLogExportColumns = "logs.created_at, logs.model_name, logs.token_name, logs.prompt_tokens, logs.completion_tokens, logs.quota, logs.other"
+
 // LogListFilter describes list/export query filters for usage logs.
 type LogListFilter struct {
 	UserId         int
@@ -645,15 +648,10 @@ func GetLogsForExport(f LogListFilter, maxRows int) (logs []*Log, total int64, e
 	if total > int64(maxRows) {
 		return nil, total, fmt.Errorf("记录数超过导出上限 %d 条，请缩小筛选范围", maxRows)
 	}
-	err = tx.Order("logs.id desc").Limit(maxRows).Find(&logs).Error
+	err = tx.Select(usageLogExportColumns).Order("logs.id desc").Limit(maxRows).Find(&logs).Error
 	if err != nil {
 		common.SysError("failed to query logs for export: " + err.Error())
 		return nil, total, errors.New("查询日志失败")
-	}
-	if f.ForAdmin {
-		if err = fillLogChannelNames(logs); err != nil {
-			return nil, total, err
-		}
 	}
 	return logs, total, nil
 }
@@ -682,11 +680,8 @@ func GetUserConsumeLogsForAdminExport(userId int, startTimestamp, endTimestamp i
 	if total > adminUserLogExportMaxRows {
 		return nil, fmt.Errorf("记录数超过导出上限 %d 条，请缩小时间范围", adminUserLogExportMaxRows)
 	}
-	err = tx.Order("logs.id asc").Find(&logs).Error
+	err = tx.Select(usageLogExportColumns).Order("logs.id asc").Find(&logs).Error
 	if err != nil {
-		return nil, err
-	}
-	if err = fillLogChannelNames(logs); err != nil {
 		return nil, err
 	}
 	return logs, nil

@@ -89,9 +89,9 @@ export function UserBillExportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='sm:max-w-md'>
         <DialogHeader>
-          <DialogTitle>{t('Export usage CSV')}</DialogTitle>
+          <DialogTitle>{t('Export usage')}</DialogTitle>
           <DialogDescription>
-            {t('Export usage CSV for user {{name}} (ID {{id}})', {
+            {t('Export usage for user {{name}} (ID {{id}})', {
               name: username,
               id: userId,
             })}
