@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -48,10 +49,11 @@ func parseLogExportLocation(c *gin.Context) *time.Location {
 
 func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	started := time.Now()
+	beginUsageExportTiming(c)
 	logger.LogInfo(c, fmt.Sprintf("usage log export stage=start user_id=%d type=%d", filter.UserId, filter.LogType))
 	logs, _, err := model.GetLogsForExport(c, filter, 0)
 	if err != nil {
-		logUsageExportStage(c, "done", 0, time.Since(started))
+		finishUsageExport(c, 0, started)
 		if strings.Contains(err.Error(), "导出上限") {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -64,11 +66,12 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	}
 
 	loc := parseLogExportLocation(c)
+	logger.LogInfo(c, fmt.Sprintf("usage log export stage=workbook begin rows=%d", len(logs)))
 	buildStarted := time.Now()
 	file, err := newUsageLogsWorkbook(logs, loc)
 	logUsageExportStage(c, "workbook", len(logs), time.Since(buildStarted))
 	if err != nil {
-		logUsageExportStage(c, "done", len(logs), time.Since(started))
+		finishUsageExport(c, len(logs), started)
 		common.ApiError(c, err)
 		return
 	}
@@ -76,7 +79,7 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 
 	buf, err := packUsageLogsXLSX(c, file, len(logs))
 	if err != nil {
-		logUsageExportStage(c, "done", len(logs), time.Since(started))
+		finishUsageExport(c, len(logs), started)
 		common.ApiError(c, err)
 		return
 	}
@@ -84,14 +87,34 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
 	c.Status(http.StatusOK)
 	err = sendPackedUsageLogsXLSX(c, c.Writer, buf, len(logs))
-	logUsageExportStage(c, "done", len(logs), time.Since(started))
+	finishUsageExport(c, len(logs), started)
 	if err != nil {
 		logger.LogInfo(c, "usage log export stage=download error="+err.Error())
 	}
 }
 
+func beginUsageExportTiming(c *gin.Context) {
+	c.Request = c.Request.WithContext(model.NewUsageExportTimingContext(c.Request.Context()))
+}
+
+func finishUsageExport(c *gin.Context, rows int, started time.Time) {
+	elapsed := time.Since(started)
+	logUsageExportStage(c, "done", rows, elapsed)
+	logger.LogInfo(c, model.FormatUsageExportTiming(c, elapsed))
+}
+
+func logUsageExportZipClose(c *gin.Context, zipWriter *zip.Writer, rows int) {
+	closeStarted := time.Now()
+	err := zipWriter.Close()
+	logUsageExportStage(c, "zip_close", rows, time.Since(closeStarted))
+	if err != nil {
+		logger.LogInfo(c, "usage log export stage=zip_close error="+err.Error())
+	}
+}
+
 func logUsageExportStage(ctx context.Context, stage string, rows int, elapsed time.Duration) {
 	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=%s rows=%d elapsed=%s", stage, rows, elapsed.Round(time.Millisecond)))
+	model.RecordUsageExportStage(ctx, stage, elapsed)
 }
 
 // ExportAllLogs exports filtered usage logs as Excel (admin).

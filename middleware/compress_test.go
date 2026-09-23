@@ -34,6 +34,7 @@ func TestShouldSkipContentType(t *testing.T) {
 	assert.True(t, shouldSkipContentType("image/png"))
 	assert.True(t, shouldSkipContentType("font/woff2"))
 	assert.True(t, shouldSkipContentType("application/font-woff2"))
+	assert.True(t, shouldSkipContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
 	assert.False(t, shouldSkipContentType("text/javascript; charset=utf-8"))
 	assert.False(t, shouldSkipContentType("application/json"))
 }
@@ -93,6 +94,26 @@ func TestCompressSkipsSmallResponses(t *testing.T) {
 	require.Equal(t, 200, rec.Code)
 	assert.Empty(t, rec.Header().Get("Content-Encoding"))
 	assert.Equal(t, "ok", rec.Body.String())
+}
+
+func TestCompressSkipsSpreadsheet(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := bytes.Repeat([]byte("x"), compressMinLength)
+	router := gin.New()
+	router.Use(Compress())
+	router.GET("/export", func(c *gin.Context) {
+		c.Data(200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/export", nil)
+	req.Header.Set("Accept-Encoding", "br, gzip")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, 200, rec.Code)
+	assert.Empty(t, rec.Header().Get("Content-Encoding"))
+	assert.Equal(t, body, rec.Body.Bytes())
 }
 
 func TestCompressSkipsAlreadyCompressedContentType(t *testing.T) {

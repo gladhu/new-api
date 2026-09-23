@@ -41,6 +41,7 @@ var usageLogExportHeaders = []interface{}{
 }
 
 func writeUsageLogsXLSX(ctx context.Context, w io.Writer, logs []*model.Log, loc *time.Location) error {
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=workbook begin rows=%d", len(logs)))
 	buildStarted := time.Now()
 	file, err := newUsageLogsWorkbook(logs, loc)
 	logUsageExportStage(ctx, "workbook", len(logs), time.Since(buildStarted))
@@ -65,6 +66,7 @@ func packUsageLogsXLSX(ctx context.Context, file *excelize.File, rows int) (*byt
 		})
 		return zw
 	})
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=generate begin rows=%d", rows))
 	generateStarted := time.Now()
 	buf, err := file.WriteToBuffer()
 	logUsageExportStage(ctx, "generate", rows, time.Since(generateStarted))
@@ -72,9 +74,12 @@ func packUsageLogsXLSX(ctx context.Context, file *excelize.File, rows int) (*byt
 }
 
 func sendPackedUsageLogsXLSX(ctx context.Context, w io.Writer, buf *bytes.Buffer, rows int) error {
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download begin rows=%d bytes=%d", rows, buf.Len()))
 	downloadStarted := time.Now()
 	n, err := buf.WriteTo(w)
-	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download rows=%d bytes=%d elapsed=%s", rows, n, time.Since(downloadStarted).Round(time.Millisecond)))
+	elapsed := time.Since(downloadStarted)
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download rows=%d bytes=%d elapsed=%s", rows, n, elapsed.Round(time.Millisecond)))
+	model.RecordUsageExportStage(ctx, "download", elapsed)
 	return err
 }
 

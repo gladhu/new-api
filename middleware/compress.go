@@ -3,11 +3,14 @@ package middleware
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
 )
@@ -33,6 +36,7 @@ func Compress() gin.HandlerFunc {
 		}
 
 		cw := newCompressResponseWriter(c.Writer, encoding)
+		cw.request = c
 		c.Writer = cw
 		c.Header("Vary", "Accept-Encoding")
 		c.Next()
@@ -120,6 +124,7 @@ func shouldSkipContentType(contentType string) bool {
 		"audio/",
 		"font/",
 		"application/zip",
+		"application/vnd.openxmlformats-officedocument.",
 		"application/gzip",
 		"application/x-gzip",
 		"application/x-compress",
@@ -141,11 +146,14 @@ func shouldSkipContentType(contentType string) bool {
 
 type compressResponseWriter struct {
 	gin.ResponseWriter
-	encoding  string
-	minLength int
-	buf       bytes.Buffer
-	writer    io.WriteCloser
-	skipped   bool
+	request          *gin.Context
+	encoding         string
+	minLength        int
+	buf              bytes.Buffer
+	writer           io.WriteCloser
+	skipped          bool
+	rawBytes         int
+	exportLoggedSkip bool
 }
 
 func newCompressResponseWriter(w gin.ResponseWriter, encoding string) *compressResponseWriter {
@@ -168,6 +176,7 @@ func (w *compressResponseWriter) WriteHeaderNow() {
 
 func (w *compressResponseWriter) Write(data []byte) (int, error) {
 	n := len(data)
+	w.rawBytes += n
 
 	if w.writer != nil {
 		return w.writer.Write(data)
@@ -218,6 +227,7 @@ func (w *compressResponseWriter) startCompression() error {
 
 	if !w.shouldCompressResponse() {
 		w.skipped = true
+		w.logExportCompress("skip", 0)
 		return w.writeRawBuffer()
 	}
 
@@ -242,6 +252,7 @@ func (w *compressResponseWriter) startCompression() error {
 	header.Del("Content-Length")
 	header.Set("Content-Encoding", w.encoding)
 	w.writer = compressor
+	w.logExportCompress("start", 0)
 
 	if w.buf.Len() > 0 {
 		if _, err := w.writer.Write(w.buf.Bytes()); err != nil {
@@ -280,7 +291,9 @@ func (w *compressResponseWriter) writeRawBuffer() error {
 
 func (w *compressResponseWriter) finish() {
 	if w.writer != nil {
+		closeStarted := time.Now()
 		_ = w.writer.Close()
+		w.logExportCompress("close", time.Since(closeStarted))
 		return
 	}
 
@@ -290,11 +303,33 @@ func (w *compressResponseWriter) finish() {
 
 	if !w.skipped && w.buf.Len() >= w.minLength {
 		if err := w.startCompression(); err == nil && w.writer != nil {
+			closeStarted := time.Now()
 			_ = w.writer.Close()
+			w.logExportCompress("close", time.Since(closeStarted))
 			return
 		}
 	}
 
 	w.skipped = true
 	_ = w.writeRawBuffer()
+}
+
+func (w *compressResponseWriter) logExportCompress(action string, elapsed time.Duration) {
+	if w.request == nil || w.request.Request == nil || !strings.Contains(w.request.Request.URL.Path, "/export") {
+		return
+	}
+	if action == "skip" {
+		if w.exportLoggedSkip {
+			return
+		}
+		w.exportLoggedSkip = true
+	}
+	msg := fmt.Sprintf("usage log export stage=http_compress action=%s encoding=%s bytes=%d", action, w.encoding, w.rawBytes)
+	if action == "skip" {
+		msg = fmt.Sprintf("usage log export stage=http_compress action=skip content_type=%s bytes=%d", w.Header().Get("Content-Type"), w.rawBytes)
+	}
+	if action == "close" {
+		msg += " elapsed=" + elapsed.Round(time.Millisecond).String()
+	}
+	logger.LogInfo(w.request, msg)
 }

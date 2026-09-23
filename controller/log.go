@@ -396,19 +396,21 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 	}
 
 	started := time.Now()
+	beginUsageExportTiming(c)
 	logger.LogInfo(c, fmt.Sprintf("usage log export stage=start user_id=%d", userId))
 	logs, err := model.GetUserConsumeLogsForAdminExport(c, userId, startSec, endSec)
 	if err != nil {
-		logUsageExportStage(c, "done", 0, time.Since(started))
+		finishUsageExport(c, 0, started)
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 
+	logger.LogInfo(c, fmt.Sprintf("usage log export stage=workbook begin rows=%d", len(logs)))
 	buildStarted := time.Now()
 	file, err := newUsageLogsWorkbook(logs, loc)
 	logUsageExportStage(c, "workbook", len(logs), time.Since(buildStarted))
 	if err != nil {
-		logUsageExportStage(c, "done", len(logs), time.Since(started))
+		finishUsageExport(c, len(logs), started)
 		common.ApiError(c, err)
 		return
 	}
@@ -416,7 +418,7 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 
 	buf, err := packUsageLogsXLSX(c, file, len(logs))
 	if err != nil {
-		logUsageExportStage(c, "done", len(logs), time.Since(started))
+		finishUsageExport(c, len(logs), started)
 		common.ApiError(c, err)
 		return
 	}
@@ -425,7 +427,7 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
 	c.Status(http.StatusOK)
 	err = sendPackedUsageLogsXLSX(c, c.Writer, buf, len(logs))
-	logUsageExportStage(c, "done", len(logs), time.Since(started))
+	finishUsageExport(c, len(logs), started)
 	if err != nil {
 		logger.LogInfo(c, "usage log export stage=download error="+err.Error())
 	}
@@ -456,10 +458,11 @@ func ExportAdminUserMonthlyBillAndConsumptionDetails(c *gin.Context) {
 		return
 	}
 	started := time.Now()
+	beginUsageExportTiming(c)
 	logger.LogInfo(c, fmt.Sprintf("usage log export stage=start user_id=%d", userId))
 	logs, err := model.GetUserConsumeLogsForAdminExport(c, userId, startSec, endSec)
 	if err != nil {
-		logUsageExportStage(c, "done", 0, time.Since(started))
+		finishUsageExport(c, 0, started)
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -469,11 +472,12 @@ func ExportAdminUserMonthlyBillAndConsumptionDetails(c *gin.Context) {
 	c.Status(http.StatusOK)
 
 	zipWriter := zip.NewWriter(c.Writer)
-	defer zipWriter.Close()
 
 	monthlyFilename := adminUserExportFilename("monthly-bill", userId, username, year, month)
 	monthlyFile, err := zipWriter.Create(monthlyFilename)
 	if err != nil {
+		logUsageExportZipClose(c, zipWriter, len(logs))
+		finishUsageExport(c, len(logs), started)
 		return
 	}
 	_, _ = monthlyFile.Write([]byte{0xEF, 0xBB, 0xBF})
@@ -483,11 +487,15 @@ func ExportAdminUserMonthlyBillAndConsumptionDetails(c *gin.Context) {
 	detailsFilename := adminUserConsumptionDetailsFilename(userId, username, year, month)
 	detailsFile, err := zipWriter.Create(detailsFilename)
 	if err != nil {
+		logUsageExportZipClose(c, zipWriter, len(logs))
+		finishUsageExport(c, len(logs), started)
 		return
 	}
 	if err = writeUsageLogsXLSX(c, detailsFile, logs, loc); err != nil {
-		logUsageExportStage(c, "done", len(logs), time.Since(started))
+		logUsageExportZipClose(c, zipWriter, len(logs))
+		finishUsageExport(c, len(logs), started)
 		return
 	}
-	logUsageExportStage(c, "done", len(logs), time.Since(started))
+	logUsageExportZipClose(c, zipWriter, len(logs))
+	finishUsageExport(c, len(logs), started)
 }

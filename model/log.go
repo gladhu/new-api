@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -641,6 +642,7 @@ func GetLogsForExport(ctx context.Context, f LogListFilter, maxRows int) (logs [
 	if err != nil {
 		return nil, 0, err
 	}
+	logger.LogInfo(ctx, "usage log export stage=count begin")
 	countStarted := time.Now()
 	if err = tx.Count(&total).Error; err != nil {
 		logUsageExportStage(ctx, "count", 0, time.Since(countStarted))
@@ -651,6 +653,7 @@ func GetLogsForExport(ctx context.Context, f LogListFilter, maxRows int) (logs [
 	if total > int64(maxRows) {
 		return nil, total, fmt.Errorf("记录数超过导出上限 %d 条，请缩小筛选范围", maxRows)
 	}
+	logger.LogInfo(ctx, "usage log export stage=query begin")
 	queryStarted := time.Now()
 	err = tx.Select(usageLogExportColumns).Order("logs.id desc").Limit(maxRows).Find(&logs).Error
 	logUsageExportStage(ctx, "query", int64(len(logs)), time.Since(queryStarted))
@@ -679,6 +682,7 @@ func GetUserConsumeLogsForAdminExport(ctx context.Context, userId int, startTime
 	tx := LOG_DB.Where("logs.user_id = ? AND logs.type = ?", userId, LogTypeConsume).
 		Where("logs.created_at >= ? AND logs.created_at <= ?", startTimestamp, endTimestamp)
 	var total int64
+	logger.LogInfo(ctx, "usage log export stage=count begin")
 	countStarted := time.Now()
 	if err = tx.Model(&Log{}).Count(&total).Error; err != nil {
 		logUsageExportStage(ctx, "count", 0, time.Since(countStarted))
@@ -688,6 +692,7 @@ func GetUserConsumeLogsForAdminExport(ctx context.Context, userId int, startTime
 	if total > adminUserLogExportMaxRows {
 		return nil, fmt.Errorf("记录数超过导出上限 %d 条，请缩小时间范围", adminUserLogExportMaxRows)
 	}
+	logger.LogInfo(ctx, "usage log export stage=query begin")
 	queryStarted := time.Now()
 	err = tx.Select(usageLogExportColumns).Order("logs.id asc").Find(&logs).Error
 	logUsageExportStage(ctx, "query", int64(len(logs)), time.Since(queryStarted))
@@ -699,6 +704,56 @@ func GetUserConsumeLogsForAdminExport(ctx context.Context, userId int, startTime
 
 func logUsageExportStage(ctx context.Context, stage string, rows int64, elapsed time.Duration) {
 	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=%s rows=%d elapsed=%s", stage, rows, elapsed.Round(time.Millisecond)))
+	RecordUsageExportStage(ctx, stage, elapsed)
+}
+
+type usageExportTimingKey struct{}
+
+type usageExportStageSample struct {
+	stage   string
+	elapsed time.Duration
+}
+
+type usageExportTiming struct {
+	mu      sync.Mutex
+	samples []usageExportStageSample
+}
+
+// NewUsageExportTimingContext collects per-stage export durations for a summary line.
+func NewUsageExportTimingContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, usageExportTimingKey{}, &usageExportTiming{})
+}
+
+// RecordUsageExportStage keeps one finished stage so the export summary can list it.
+func RecordUsageExportStage(ctx context.Context, stage string, elapsed time.Duration) {
+	if ctx == nil || stage == "" || stage == "done" {
+		return
+	}
+	timing, _ := ctx.Value(usageExportTimingKey{}).(*usageExportTiming)
+	if timing == nil {
+		return
+	}
+	timing.mu.Lock()
+	timing.samples = append(timing.samples, usageExportStageSample{stage: stage, elapsed: elapsed})
+	timing.mu.Unlock()
+}
+
+// FormatUsageExportTiming renders total time and each finished stage on one line.
+func FormatUsageExportTiming(ctx context.Context, total time.Duration) string {
+	summary := fmt.Sprintf("usage log export summary total=%s", total.Round(time.Millisecond))
+	if ctx == nil {
+		return summary
+	}
+	timing, _ := ctx.Value(usageExportTimingKey{}).(*usageExportTiming)
+	if timing == nil {
+		return summary
+	}
+	timing.mu.Lock()
+	defer timing.mu.Unlock()
+	for _, sample := range timing.samples {
+		summary += fmt.Sprintf(" %s=%s", sample.stage, sample.elapsed.Round(time.Millisecond))
+	}
+	return summary
 }
 
 type AdminUserMonthLogTypeAgg struct {
