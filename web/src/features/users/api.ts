@@ -16,8 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { AxiosRequestConfig } from 'axios'
+import type { AxiosProgressEvent, AxiosRequestConfig } from 'axios'
+import { t } from 'i18next'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { exportDownloadProgressMessage } from '@/lib/export-download-progress'
 import type { PermissionCatalog } from '@/lib/admin-permissions'
 import type { CustomOAuthBinding } from '@/lib/oauth'
 import type {
@@ -246,6 +249,7 @@ export async function downloadAdminUserLogExport(
       '/api/log/admin/export/monthly_bill_and_consumption_details',
   }
   const path = pathMap[kind]
+  const toastId = toast.loading(t('Preparing export...'))
   const config = {
     params: {
       user_id: params.userId,
@@ -256,40 +260,52 @@ export async function downloadAdminUserLogExport(
     responseType: 'blob' as const,
     skipBusinessError: true,
     skipErrorHandler: true,
+    onDownloadProgress: (event: AxiosProgressEvent) => {
+      toast.loading(exportDownloadProgressMessage(event), { id: toastId })
+    },
   } satisfies AxiosRequestConfig & {
     skipBusinessError?: boolean
     skipErrorHandler?: boolean
   }
-  const res = await api.get(path, config)
-
-  const ctype = String(res.headers['content-type'] || '')
-  if (ctype.includes('application/json')) {
-    const msg = await parseBlobErrorMessage(res.data as Blob)
-    throw new Error(msg)
-  }
-  if (res.status >= 400) {
-    throw new Error(`HTTP ${res.status}`)
-  }
-
-  const blob = res.data as Blob
-  const dispo = String(res.headers['content-disposition'] || '')
-  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(dispo)
-  const fallbackMatch = /filename="([^"]+)"/i.exec(dispo)
-  const filename =
-    (utf8Match?.[1] ? decodeURIComponent(utf8Match[1]) : undefined) ||
-    fallbackMatch?.[1] ||
-    `export-${params.userId}-${params.year}-${String(params.month).padStart(2, '0')}.csv`
-
-  const url = URL.createObjectURL(blob)
   try {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-  } finally {
-    URL.revokeObjectURL(url)
+    const res = await api.get(path, config)
+
+    const ctype = String(res.headers['content-type'] || '')
+    if (ctype.includes('application/json')) {
+      const msg = await parseBlobErrorMessage(res.data as Blob)
+      throw new Error(msg)
+    }
+    if (res.status >= 400) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const blob = res.data as Blob
+    const dispo = String(res.headers['content-disposition'] || '')
+    const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(dispo)
+    const fallbackMatch = /filename="([^"]+)"/i.exec(dispo)
+    const filename =
+      (utf8Match?.[1] ? decodeURIComponent(utf8Match[1]) : undefined) ||
+      fallbackMatch?.[1] ||
+      `export-${params.userId}-${params.year}-${String(params.month).padStart(2, '0')}.csv`
+
+    const url = URL.createObjectURL(blob)
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+    toast.success(t('Export completed'), { id: toastId })
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : t('Export failed'),
+      { id: toastId }
+    )
+    throw error
   }
 }

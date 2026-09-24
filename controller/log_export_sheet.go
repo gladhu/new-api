@@ -1,13 +1,12 @@
 package controller
 
 import (
-	"archive/zip"
 	"bytes"
-	"compress/flate"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -18,6 +17,10 @@ import (
 )
 
 const usageLogXLSXContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+// usageLogExportDownloadChunkBytes is the write/log step size during download.
+// 1 MiB keeps progress logs useful without flooding the log file.
+const usageLogExportDownloadChunkBytes = 1 << 20
 
 var usageLogExportHeaders = []interface{}{
 	"created_time",
@@ -56,16 +59,10 @@ func writeUsageLogsXLSX(ctx context.Context, w io.Writer, logs []*model.Log, loc
 	return sendPackedUsageLogsXLSX(ctx, w, buf, len(logs))
 }
 
-// packUsageLogsXLSX compresses the workbook into memory. BestSpeed is used
-// because the default deflate level dominates export time on large sheets.
+// packUsageLogsXLSX packs the workbook with excelize's default zip deflate.
+// DefaultCompression makes large exports smaller than BestSpeed; the extra CPU
+// is usually cheaper than the download time on slow client links.
 func packUsageLogsXLSX(ctx context.Context, file *excelize.File, rows int) (*bytes.Buffer, error) {
-	file.SetZipWriter(func(w io.Writer) excelize.ZipWriter {
-		zw := zip.NewWriter(w)
-		zw.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
-			return flate.NewWriter(out, flate.BestSpeed)
-		})
-		return zw
-	})
 	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=generate begin rows=%d", rows))
 	generateStarted := time.Now()
 	buf, err := file.WriteToBuffer()
@@ -74,13 +71,48 @@ func packUsageLogsXLSX(ctx context.Context, file *excelize.File, rows int) (*byt
 }
 
 func sendPackedUsageLogsXLSX(ctx context.Context, w io.Writer, buf *bytes.Buffer, rows int) error {
-	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download begin rows=%d bytes=%d", rows, buf.Len()))
+	total := int64(buf.Len())
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download begin rows=%d bytes=%d", rows, total))
 	downloadStarted := time.Now()
-	n, err := buf.WriteTo(w)
+	data := buf.Bytes()
+	var written int64
+	var lastLogged int64
+	for offset := 0; offset < len(data); {
+		end := offset + usageLogExportDownloadChunkBytes
+		if end > len(data) {
+			end = len(data)
+		}
+		n, err := w.Write(data[offset:end])
+		written += int64(n)
+		offset += n
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		if written-lastLogged >= usageLogExportDownloadChunkBytes || offset >= len(data) || err != nil {
+			elapsed := time.Since(downloadStarted)
+			speed := int64(0)
+			if elapsed > 0 {
+				speed = written * int64(time.Second) / int64(elapsed)
+			}
+			logger.LogInfo(ctx, fmt.Sprintf(
+				"usage log export stage=download_progress rows=%d written=%d total=%d elapsed=%s speed=%dB/s",
+				rows, written, total, elapsed.Round(time.Millisecond), speed,
+			))
+			lastLogged = written
+		}
+		if err != nil {
+			model.RecordUsageExportStage(ctx, "download", time.Since(downloadStarted))
+			return err
+		}
+		if n == 0 {
+			model.RecordUsageExportStage(ctx, "download", time.Since(downloadStarted))
+			return io.ErrShortWrite
+		}
+	}
 	elapsed := time.Since(downloadStarted)
-	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download rows=%d bytes=%d elapsed=%s", rows, n, elapsed.Round(time.Millisecond)))
+	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=download rows=%d bytes=%d elapsed=%s", rows, written, elapsed.Round(time.Millisecond)))
 	model.RecordUsageExportStage(ctx, "download", elapsed)
-	return err
+	return nil
 }
 
 func newUsageLogsWorkbook(logs []*model.Log, loc *time.Location) (*excelize.File, error) {

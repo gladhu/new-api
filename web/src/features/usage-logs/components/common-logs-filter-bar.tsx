@@ -21,7 +21,6 @@ import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import type { Table } from '@tanstack/react-table'
 import { Download, Eye, EyeOff, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
@@ -246,15 +245,12 @@ export function CommonLogsFilterBar<TData>(
       })
       const { p: _p, page_size: _ps, ...exportParams } = apiParams
       await downloadUsageLogsExport(exportParams, isAdmin)
-      toast.success(t('Export completed'))
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('Export failed')
-      )
+    } catch {
+      // downloadUsageLogsExport already shows the error toast
     } finally {
       setExporting(false)
     }
-  }, [filters, isAdmin, logType, t])
+  }, [filters, isAdmin, logType])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

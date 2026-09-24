@@ -1,5 +1,8 @@
-import type { AxiosRequestConfig } from 'axios'
+import type { AxiosProgressEvent, AxiosRequestConfig } from 'axios'
+import { t } from 'i18next'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { exportDownloadProgressMessage } from '@/lib/export-download-progress'
 import type { GetLogsParams } from '../types'
 
 async function parseBlobErrorMessage(blob: Blob): Promise<string> {
@@ -61,29 +64,42 @@ export async function downloadUsageLogsExport(
     /* ignore */
   }
 
+  const toastId = toast.loading(t('Preparing export...'))
   const config = {
     params: query,
     responseType: 'blob' as const,
     skipBusinessError: true,
     skipErrorHandler: true,
     disableDuplicate: true,
+    onDownloadProgress: (event: AxiosProgressEvent) => {
+      toast.loading(exportDownloadProgressMessage(event), { id: toastId })
+    },
   } satisfies AxiosRequestConfig & {
     skipBusinessError?: boolean
     skipErrorHandler?: boolean
     disableDuplicate?: boolean
   }
 
-  const res = await api.get(path, config)
-  const ctype = String(res.headers['content-type'] || '')
-  if (ctype.includes('application/json')) {
-    throw new Error(await parseBlobErrorMessage(res.data as Blob))
-  }
-  if (res.status >= 400) {
-    throw new Error(`HTTP ${res.status}`)
-  }
+  try {
+    const res = await api.get(path, config)
+    const ctype = String(res.headers['content-type'] || '')
+    if (ctype.includes('application/json')) {
+      throw new Error(await parseBlobErrorMessage(res.data as Blob))
+    }
+    if (res.status >= 400) {
+      throw new Error(`HTTP ${res.status}`)
+    }
 
-  triggerBlobDownload(
-    res.data as Blob,
-    String(res.headers['content-disposition'] || '')
-  )
+    triggerBlobDownload(
+      res.data as Blob,
+      String(res.headers['content-disposition'] || '')
+    )
+    toast.success(t('Export completed'), { id: toastId })
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : t('Export failed'),
+      { id: toastId }
+    )
+    throw error
+  }
 }

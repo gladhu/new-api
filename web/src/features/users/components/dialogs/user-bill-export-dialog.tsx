@@ -75,11 +75,9 @@ export function UserBillExportDialog({
         month,
         timezone: timezone.trim() || undefined,
       })
-      toast.success(t('Download started'))
       onOpenChange(false)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : t('Export failed')
-      toast.error(msg)
+    } catch {
+      // downloadAdminUserLogExport already shows the error toast
     } finally {
       setBusy(false)
     }

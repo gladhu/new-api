@@ -85,6 +85,7 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	}
 	filename := "usage-logs-" + time.Now().In(loc).Format("20060102-150405") + ".xlsx"
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
+	c.Header("Content-Length", strconv.Itoa(buf.Len()))
 	c.Status(http.StatusOK)
 	err = sendPackedUsageLogsXLSX(c, c.Writer, buf, len(logs))
 	finishUsageExport(c, len(logs), started)

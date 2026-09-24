@@ -425,6 +425,7 @@ func ExportAdminUserConsumptionDetails(c *gin.Context) {
 	username := adminUserExportUsername(userId)
 	filename := adminUserConsumptionDetailsFilename(userId, username, year, month)
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
+	c.Header("Content-Length", strconv.Itoa(buf.Len()))
 	c.Status(http.StatusOK)
 	err = sendPackedUsageLogsXLSX(c, c.Writer, buf, len(logs))
 	finishUsageExport(c, len(logs), started)
