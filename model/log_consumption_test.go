@@ -12,9 +12,8 @@ import (
 
 func openLogConsumptionTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	common.UsingSQLite = true
-	common.UsingMySQL = false
-	common.UsingPostgreSQL = false
+	previous := LOG_DB
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
@@ -26,6 +25,7 @@ func openLogConsumptionTestDB(t *testing.T) *gorm.DB {
 	}
 	LOG_DB = db
 	t.Cleanup(func() {
+		LOG_DB = previous
 		sqlDB, err := db.DB()
 		if err == nil {
 			_ = sqlDB.Close()
