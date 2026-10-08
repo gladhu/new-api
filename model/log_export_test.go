@@ -13,8 +13,7 @@ import (
 
 func openLogExportTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	previous := LOG_DB
-	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	common.UsingSQLite = true
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -24,13 +23,6 @@ func openLogExportTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("migrate: %v", err)
 	}
 	LOG_DB = db
-	t.Cleanup(func() {
-		LOG_DB = previous
-		sqlDB, err := db.DB()
-		if err == nil {
-			_ = sqlDB.Close()
-		}
-	})
 	return db
 }
 
