@@ -107,6 +107,52 @@ func TestChatCompletionsRequestToResponsesRequestPreservesQwenThinkingBudget(t *
 	}
 }
 
+func TestChatCompletionsRequestToResponsesRequestMapsReasoningEffort(t *testing.T) {
+	t.Run("reasoning_effort field", func(t *testing.T) {
+		got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+			Model:           "gpt-test",
+			Messages:        []dto.Message{{Role: "user", Content: "hello"}},
+			ReasoningEffort: "low",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, got.Reasoning)
+		assert.Equal(t, "low", got.Reasoning.Effort)
+		assert.Equal(t, "detailed", got.Reasoning.Summary)
+	})
+
+	t.Run("reasoning.effort object", func(t *testing.T) {
+		got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+			Model:     "gpt-test",
+			Messages:  []dto.Message{{Role: "user", Content: "hello"}},
+			Reasoning: json.RawMessage(`{"effort":"high"}`),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, got.Reasoning)
+		assert.Equal(t, "high", got.Reasoning.Effort)
+	})
+
+	t.Run("reasoning_effort wins over reasoning object", func(t *testing.T) {
+		got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+			Model:           "gpt-test",
+			Messages:        []dto.Message{{Role: "user", Content: "hello"}},
+			ReasoningEffort: "low",
+			Reasoning:       json.RawMessage(`{"effort":"high"}`),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, got.Reasoning)
+		assert.Equal(t, "low", got.Reasoning.Effort)
+	})
+
+	t.Run("absent stays nil", func(t *testing.T) {
+		got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+			Model:    "gpt-test",
+			Messages: []dto.Message{{Role: "user", Content: "hello"}},
+		})
+		require.NoError(t, err)
+		assert.Nil(t, got.Reasoning)
+	})
+}
+
 func TestChatCompletionsRequestToResponsesRequestRejectsMultipleChoices(t *testing.T) {
 	_, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
 		Model: "gpt-test",

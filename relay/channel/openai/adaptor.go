@@ -614,8 +614,18 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 		}
 		request.Model = originModel
 	}
-	if info != nil && request.Reasoning != nil && request.Reasoning.Effort != "" {
-		info.SetReasoningEffort(request.Reasoning.Effort)
+	if info != nil && request.Reasoning != nil {
+		if info.HasChannelMeta() && service.ShouldAzureOpenAIChatCompletionsCompat(
+			info.ChannelType,
+			request.Model,
+			info.UpstreamModelName,
+			info.OriginModelName,
+		) {
+			request.Reasoning.Effort = service.NormalizeAzureGPT6ReasoningEffort(request.Reasoning.Effort)
+		}
+		if request.Reasoning.Effort != "" {
+			info.SetReasoningEffort(request.Reasoning.Effort)
+		}
 	}
 	return request, nil
 }

@@ -73,6 +73,23 @@ func convertChatResponseFormatToResponsesText(reqFormat *dto.ResponseFormat) jso
 	return textRaw
 }
 
+func chatReasoningEffort(req *dto.GeneralOpenAIRequest) string {
+	if req == nil {
+		return ""
+	}
+	if effort := strings.TrimSpace(req.ReasoningEffort); effort != "" {
+		return effort
+	}
+	if len(req.Reasoning) == 0 {
+		return ""
+	}
+	var reasoning dto.Reasoning
+	if err := kitutil.Unmarshal(req.Reasoning, &reasoning); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(reasoning.Effort)
+}
+
 func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*dto.OpenAIResponsesRequest, error) {
 	if req == nil {
 		return nil, errors.New("request is nil")
@@ -412,9 +429,9 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		out.MaxOutputTokens = lo.ToPtr(maxOutputTokens)
 	}
 
-	if req.ReasoningEffort != "" {
+	if effort := chatReasoningEffort(req); effort != "" {
 		out.Reasoning = &dto.Reasoning{
-			Effort:  req.ReasoningEffort,
+			Effort:  effort,
 			Summary: "detailed",
 		}
 	}

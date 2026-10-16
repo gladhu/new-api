@@ -74,3 +74,30 @@ func TestShouldAzureOpenAIChatCompletionsCompat(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeAzureGPT6ReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "", want: ""},
+		{in: "  ", want: ""},
+		{in: "low", want: "low"},
+		{in: "MEDIUM", want: "medium"},
+		{in: "high", want: "high"},
+		{in: "xhigh", want: "xhigh"},
+		{in: "max", want: "max"},
+		{in: "none", want: "high"},
+		{in: "minimal", want: "high"},
+		{in: "unknown", want: "high"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, NormalizeAzureGPT6ReasoningEffort(tt.in))
+		})
+	}
+}
