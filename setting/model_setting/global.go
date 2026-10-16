@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/config"
 )
 
@@ -46,8 +47,10 @@ var defaultOpenaiSettings = GlobalSettings{
 		"kimi-k2-thinking",
 	},
 	ChatCompletionsToResponsesPolicy: ChatCompletionsToResponsesPolicy{
-		Enabled:     false,
-		AllChannels: true,
+		Enabled:       true,
+		AllChannels:   false,
+		ChannelTypes:  []int{constant.ChannelTypeAzure},
+		ModelPatterns: []string{"^gpt-6"},
 	},
 }
 

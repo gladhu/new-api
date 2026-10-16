@@ -2,6 +2,36 @@ package common
 
 import "testing"
 
+func TestIsOpenAIGPT6PlusModel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{model: "gpt-6-luna-1", want: true},
+		{model: "gpt-6.1-sol", want: true},
+		{model: "gpt-6.1-sol-azure", want: true},
+		{model: "gpt-6.1-sol-2026-09-29", want: true},
+		{model: "gpt-7-foo", want: true},
+		{model: "openai.gpt-6-astra", want: true},
+		{model: "gpt-5.6-luna", want: false},
+		{model: "gpt-5", want: false},
+		{model: "gpt-4o", want: false},
+		{model: "gpt-oss-120b", want: false},
+		{model: "claude-sonnet-4-6", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			t.Parallel()
+			if got := IsOpenAIGPT6PlusModel(tt.model); got != tt.want {
+				t.Fatalf("IsOpenAIGPT6PlusModel(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsBedrockOpenAIModel(t *testing.T) {
 	t.Parallel()
 

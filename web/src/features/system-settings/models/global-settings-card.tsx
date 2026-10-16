@@ -59,8 +59,9 @@ const chatToResponsesPolicyExample = JSON.stringify(
   {
     enabled: true,
     all_channels: false,
+    channel_types: [3],
     channel_ids: [1, 2],
-    model_patterns: ['^gpt-4o.*$', '^gpt-5.*$'],
+    model_patterns: ['^gpt-6'],
   },
   null,
   2
@@ -70,7 +71,7 @@ const chatToResponsesPolicyAllChannelsExample = JSON.stringify(
   {
     enabled: true,
     all_channels: true,
-    model_patterns: ['^gpt-4o.*$', '^gpt-5.*$'],
+    model_patterns: ['^gpt-6'],
   },
   null,
   2

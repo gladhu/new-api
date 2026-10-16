@@ -83,6 +83,14 @@ func SplitBedrockInferenceProfile(modelName string) (prefix, base string) {
 	return "", modelName
 }
 
+// IsOpenAIGPT6PlusModel reports whether the model is GPT-6 or a later GPT
+// generation. CRIS prefixes and the openai. provider prefix are ignored.
+// gpt-oss remains excluded.
+func IsOpenAIGPT6PlusModel(modelName string) bool {
+	major, _, ok := parseOpenAIGPTVersion(modelName)
+	return ok && major >= 6
+}
+
 // IsBedrockOpenAIModel reports whether the model is an OpenAI frontier model
 // hosted on AWS Bedrock (Responses API via bedrock-mantle / bedrock-runtime).
 //
@@ -93,31 +101,39 @@ func SplitBedrockInferenceProfile(modelName string) (prefix, base string) {
 // CRIS prefixes (global./us./...) and the openai. provider prefix are ignored.
 // gpt-oss remains excluded (different Bedrock product, not Mantle Responses).
 func IsBedrockOpenAIModel(modelName string) bool {
-	_, modelName = SplitBedrockInferenceProfile(modelName)
-	modelName = strings.TrimPrefix(modelName, "openai.")
-	if !strings.HasPrefix(modelName, "gpt-") || strings.HasPrefix(modelName, "gpt-oss") {
-		return false
-	}
-
-	rest := modelName[len("gpt-"):]
-	major, i := 0, 0
-	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
-		major = major*10 + int(rest[i]-'0')
-		i++
-	}
-	if i == 0 {
+	major, restAfterMajor, ok := parseOpenAIGPTVersion(modelName)
+	if !ok {
 		return false
 	}
 	if major >= 6 {
 		return true
 	}
-	if major != 5 || i >= len(rest) || rest[i] != '.' {
+	if major != 5 || restAfterMajor == "" || restAfterMajor[0] != '.' {
 		return false
 	}
-	minor, j := 0, i+1
-	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
-		minor = minor*10 + int(rest[j]-'0')
+	minor, j := 0, 1
+	for j < len(restAfterMajor) && restAfterMajor[j] >= '0' && restAfterMajor[j] <= '9' {
+		minor = minor*10 + int(restAfterMajor[j]-'0')
 		j++
 	}
-	return j > i+1 && minor >= 4
+	return j > 1 && minor >= 4
+}
+
+func parseOpenAIGPTVersion(modelName string) (major int, restAfterMajor string, ok bool) {
+	_, modelName = SplitBedrockInferenceProfile(modelName)
+	modelName = strings.TrimPrefix(modelName, "openai.")
+	if !strings.HasPrefix(modelName, "gpt-") || strings.HasPrefix(modelName, "gpt-oss") {
+		return 0, "", false
+	}
+
+	rest := modelName[len("gpt-"):]
+	i := 0
+	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+		major = major*10 + int(rest[i]-'0')
+		i++
+	}
+	if i == 0 {
+		return 0, "", false
+	}
+	return major, rest[i:], true
 }

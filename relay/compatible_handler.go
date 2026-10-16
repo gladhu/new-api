@@ -82,10 +82,18 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		info.UpstreamModelName,
 		request.Model,
 	)
+	// Azure GPT-6+ rejects function tools on chat/completions while reasoning is
+	// on (the default). Convert to /v1/responses the same way Bedrock does.
+	azureChatCompat := service.ShouldAzureOpenAIChatCompletionsCompat(
+		info.ChannelType,
+		info.OriginModelName,
+		info.UpstreamModelName,
+		request.Model,
+	)
 	policyChatCompat := !passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName)
-	if info.RelayMode == relayconstant.RelayModeChatCompletions && (bedrockChatCompat || policyChatCompat) {
+	if info.RelayMode == relayconstant.RelayModeChatCompletions && (bedrockChatCompat || azureChatCompat || policyChatCompat) {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {

@@ -59,6 +59,10 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 			return string(constant.EndpointTypeOpenAIResponse)
 		}
 	}
+	// Azure GPT-6+ function tools require /v1/responses.
+	if channel != nil && channel.Type == constant.ChannelTypeAzure && common.IsOpenAIGPT6PlusModel(modelName) {
+		return string(constant.EndpointTypeOpenAIResponse)
+	}
 	return normalized
 }
 
