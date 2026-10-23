@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
@@ -77,11 +80,13 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 	adaptor.Init(info)
 	var requestBody io.Reader
+	var outboundStorage common.BodyStorage
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
+		outboundStorage = storage
 		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
@@ -114,6 +119,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		defer closer.Close()
+		if bs, ok := closer.(common.BodyStorage); ok {
+			outboundStorage = bs
+		}
 		jsonData = nil
 		requestBody = body
 	}
@@ -131,9 +139,36 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-			// reset status code 重置状态码
-			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-			return newAPIError
+			if isEncryptedReasoningError(httpResp.StatusCode, newAPIError) && outboundStorage != nil {
+				if rawBody, readErr := outboundStorage.Bytes(); readErr == nil {
+					if strippedBody, stripped := stripEncryptedReasoningFromResponsesBody(rawBody); stripped {
+						stripEncryptedReasoningFromRelayRequest(info.Request)
+						retryBody, retryCloser, bodyErr := relaycommon.NewOutboundJSONBody(strippedBody)
+						if bodyErr == nil {
+							defer retryCloser.Close()
+							logger.LogInfo(c, fmt.Sprintf("channel #%d rejected encrypted reasoning content, retrying after stripping encrypted reasoning from input", info.ChannelId))
+							retryResp, retryErr := adaptor.DoRequest(c, info, retryBody)
+							if retryErr != nil {
+								return types.NewOpenAIError(retryErr, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+							}
+							if retryResp != nil {
+								httpResp = retryResp.(*http.Response)
+								if httpResp.StatusCode != http.StatusOK {
+									newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+									service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+									return newAPIError
+								}
+								newAPIError = nil
+							}
+						}
+					}
+				}
+			}
+			if newAPIError != nil {
+				// reset status code 重置状态码
+				service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+				return newAPIError
+			}
 		}
 	}
 
@@ -168,4 +203,114 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		service.PostTextConsumeQuota(c, info, usageDto, nil)
 	}
 	return nil
+}
+
+func isEncryptedReasoningError(statusCode int, err *types.NewAPIError) bool {
+	if statusCode != http.StatusBadRequest || err == nil {
+		return false
+	}
+	code := strings.ToLower(strings.TrimSpace(string(err.GetErrorCode())))
+	if code == "invalid_encrypted_content" {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "invalid encrypted reasoning") ||
+		strings.Contains(msg, "encrypted content could not be decrypted") ||
+		strings.Contains(msg, "encrypted content could not be verified") {
+		return true
+	}
+	if (strings.Contains(msg, "encrypted content") || strings.Contains(msg, "encrypted_content")) &&
+		(strings.Contains(msg, "could not be verified") ||
+			strings.Contains(msg, "could not be decrypted") ||
+			strings.Contains(msg, "decrypt")) {
+		return true
+	}
+	return false
+}
+
+func stripEncryptedReasoningFromRelayRequest(request any) {
+	switch req := request.(type) {
+	case *dto.OpenAIResponsesRequest:
+		if cleaned, ok := stripEncryptedReasoningFromInput(req.Input); ok {
+			req.Input = cleaned
+		}
+	case *dto.OpenAIResponsesCompactionRequest:
+		if cleaned, ok := stripEncryptedReasoningFromInput(req.Input); ok {
+			req.Input = cleaned
+		}
+	}
+}
+
+func stripEncryptedReasoningFromResponsesBody(body []byte) ([]byte, bool) {
+	if len(body) == 0 {
+		return nil, false
+	}
+	inputResult := gjson.GetBytes(body, "input")
+	if !inputResult.Exists() || !inputResult.IsArray() {
+		return nil, false
+	}
+	cleanedInput, changed := stripEncryptedReasoningFromInput(json.RawMessage(inputResult.Raw))
+	if !changed {
+		return nil, false
+	}
+	updatedBody, err := sjson.SetRawBytes(body, "input", cleanedInput)
+	if err != nil {
+		return nil, false
+	}
+	return updatedBody, true
+}
+
+func stripEncryptedReasoningFromInput(raw json.RawMessage) (json.RawMessage, bool) {
+	if len(raw) == 0 || common.GetJsonType(raw) != "array" {
+		return raw, false
+	}
+	var items []any
+	if err := common.Unmarshal(raw, &items); err != nil {
+		return raw, false
+	}
+	kept := make([]any, 0, len(items))
+	changed := false
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			kept = append(kept, item)
+			continue
+		}
+		typ, _ := m["type"].(string)
+		if strings.EqualFold(strings.TrimSpace(typ), "reasoning") {
+			changed = true
+			continue
+		}
+		if _, hasEncrypted := m["encrypted_content"]; hasEncrypted {
+			changed = true
+			if hasResponsesItemPayload(m) {
+				cloned := make(map[string]any, len(m)-1)
+				for k, v := range m {
+					if k != "encrypted_content" {
+						cloned[k] = v
+					}
+				}
+				kept = append(kept, cloned)
+			}
+			continue
+		}
+		kept = append(kept, item)
+	}
+	if !changed || len(kept) == 0 {
+		return raw, false
+	}
+	cleaned, err := common.Marshal(kept)
+	if err != nil {
+		return raw, false
+	}
+	return cleaned, true
+}
+
+func hasResponsesItemPayload(item map[string]any) bool {
+	for _, key := range []string{"role", "content", "call_id", "output", "arguments", "input"} {
+		if _, ok := item[key]; ok {
+			return true
+		}
+	}
+	return false
 }
