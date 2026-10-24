@@ -614,14 +614,36 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 		}
 		request.Model = originModel
 	}
+
+	upstreamModel := request.Model
+	if info != nil && info.HasChannelMeta() && info.UpstreamModelName != "" {
+		upstreamModel = info.UpstreamModelName
+	}
+	if dto.IsOpenAIReasoningOModel(request.Model) || dto.IsOpenAIReasoningOModel(upstreamModel) {
+		request.Temperature = nil
+	}
+	if dto.IsOpenAIGPT5Model(request.Model) || dto.IsOpenAIGPT5Model(upstreamModel) {
+		request.Temperature = nil
+		request.TopP = nil
+	}
+
+	azureGPT6Compat := info != nil && info.HasChannelMeta() && service.ShouldAzureOpenAIChatCompletionsCompat(
+		info.ChannelType,
+		request.Model,
+		info.UpstreamModelName,
+		info.OriginModelName,
+	)
+	if azureGPT6Compat {
+		request.FrequencyPenalty = nil
+		request.PresencePenalty = nil
+	}
+
 	if info != nil && request.Reasoning != nil {
-		if info.HasChannelMeta() && service.ShouldAzureOpenAIChatCompletionsCompat(
-			info.ChannelType,
-			request.Model,
-			info.UpstreamModelName,
-			info.OriginModelName,
-		) {
+		if azureGPT6Compat {
 			request.Reasoning.Effort = service.NormalizeAzureGPT6ReasoningEffort(request.Reasoning.Effort)
+			if info.RelayFormat != types.RelayFormatOpenAIResponses {
+				request.Reasoning.Summary = ""
+			}
 		}
 		if request.Reasoning.Effort != "" {
 			info.SetReasoningEffort(request.Reasoning.Effort)

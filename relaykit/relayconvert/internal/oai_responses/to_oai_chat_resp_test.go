@@ -361,6 +361,18 @@ func TestFinalizeResponsesToChatStreamFlushesPendingDeltaOnlyArguments(t *testin
 func TestResponsesStreamEventToChatChunksFailedEventReturnsError(t *testing.T) {
 	_, err := ResponsesStreamEventToChatChunks(&dto.ResponsesStreamResponse{Type: responsesEventFailed}, newTestResponsesStreamState())
 	require.Error(t, err)
+
+	_, err = ResponsesStreamEventToChatChunks(&dto.ResponsesStreamResponse{
+		Type: responsesEventFailed,
+		Response: &dto.OpenAIResponsesResponse{
+			Error: map[string]any{
+				"code":    "server_error",
+				"message": "Azure upstream failed during reasoning",
+			},
+		},
+	}, newTestResponsesStreamState())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Azure upstream failed during reasoning")
 }
 
 func TestResponsesBufferedAccumulatorSupplementsEmptyTerminalOutput(t *testing.T) {

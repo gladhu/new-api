@@ -105,6 +105,9 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		chunks = append(chunks, state.finalize(response)...)
 		return chunks, nil
 	case responsesEventFailed, responsesEventError:
+		if oaiErr := event.GetOpenAIError(); oaiErr != nil && oaiErr.Message != "" {
+			return nil, fmt.Errorf("responses stream error: %s: %s", event.Type, oaiErr.Message)
+		}
 		return nil, fmt.Errorf("responses stream error: %s", event.Type)
 	default:
 		return nil, nil

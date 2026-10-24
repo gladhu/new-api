@@ -122,11 +122,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 				}
 			}
 		case "response.failed", "response.error":
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
-					break
-				}
+			if oaiErr := streamResp.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
+				streamErr = types.WithOpenAIError(*oaiErr, responsesStreamErrorStatusCode(oaiErr))
+				break
 			}
 			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 		}
@@ -281,12 +279,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		}
 
 		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" {
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
-					sr.Stop(streamErr)
-					return
-				}
+			if oaiErr := streamResp.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
+				streamErr = types.WithOpenAIError(*oaiErr, responsesStreamErrorStatusCode(oaiErr))
+				sr.Stop(streamErr)
+				return
 			}
 			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 			sr.Stop(streamErr)
@@ -339,4 +335,16 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		helper.Done(c)
 	}
 	return usage, nil
+}
+
+func responsesStreamErrorStatusCode(oaiErr *types.OpenAIError) int {
+	if oaiErr == nil {
+		return http.StatusInternalServerError
+	}
+	code := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", oaiErr.Code)))
+	errType := strings.ToLower(strings.TrimSpace(oaiErr.Type))
+	if code == "rate_limit_exceeded" || errType == "rate_limit_exceeded" {
+		return http.StatusTooManyRequests
+	}
+	return http.StatusInternalServerError
 }

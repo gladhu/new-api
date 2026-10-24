@@ -1,11 +1,14 @@
 package openai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +120,68 @@ func TestConvertOpenAIResponsesRequestLeavesAzureGPT6OmittedEffort(t *testing.T)
 	require.True(t, ok)
 	assert.Nil(t, got.Reasoning)
 	assert.Empty(t, info.ReasoningEffort)
+}
+
+func TestConvertOpenAIResponsesRequestSanitizesAzureGPT6ChatConvertedParams(t *testing.T) {
+	t.Parallel()
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType:       constant.ChannelTypeAzure,
+			UpstreamModelName: "gpt-6.1-sol",
+		},
+		OriginModelName: "gpt-6.1-sol",
+		RelayFormat:     types.RelayFormatOpenAI,
+	}
+	req := dto.OpenAIResponsesRequest{
+		Model:            "gpt-6.1-sol",
+		Temperature:      lo.ToPtr(0.7),
+		TopP:             lo.ToPtr(0.9),
+		FrequencyPenalty: json.RawMessage(`0.5`),
+		PresencePenalty:  json.RawMessage(`0.2`),
+		Reasoning: &dto.Reasoning{
+			Effort:  "low",
+			Summary: "detailed",
+		},
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, req)
+	require.NoError(t, err)
+	got, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Nil(t, got.Temperature)
+	assert.Nil(t, got.TopP)
+	assert.Nil(t, got.FrequencyPenalty)
+	assert.Nil(t, got.PresencePenalty)
+	require.NotNil(t, got.Reasoning)
+	assert.Equal(t, "low", got.Reasoning.Effort)
+	assert.Empty(t, got.Reasoning.Summary)
+}
+
+func TestConvertOpenAIResponsesRequestKeepsExplicitSummaryOnNativeResponsesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType:       constant.ChannelTypeAzure,
+			UpstreamModelName: "gpt-6.1-sol",
+		},
+		OriginModelName: "gpt-6.1-sol",
+		RelayFormat:     types.RelayFormatOpenAIResponses,
+	}
+	req := dto.OpenAIResponsesRequest{
+		Model: "gpt-6.1-sol",
+		Reasoning: &dto.Reasoning{
+			Effort:  "high",
+			Summary: "detailed",
+		},
+	}
+
+	converted, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, req)
+	require.NoError(t, err)
+	got, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	require.NotNil(t, got.Reasoning)
+	assert.Equal(t, "high", got.Reasoning.Effort)
+	assert.Equal(t, "detailed", got.Reasoning.Summary)
 }

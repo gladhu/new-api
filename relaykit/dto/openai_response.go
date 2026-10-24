@@ -3,6 +3,7 @@ package dto
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -386,6 +387,7 @@ const (
 type ResponsesStreamResponse struct {
 	Type     string                   `json:"type"`
 	Response *OpenAIResponsesResponse `json:"response,omitempty"`
+	Error    any                      `json:"error,omitempty"`
 	Delta    string                   `json:"delta,omitempty"`
 	Item     *ResponsesOutput         `json:"item,omitempty"`
 	// - response.function_call_arguments.delta
@@ -397,6 +399,21 @@ type ResponsesStreamResponse struct {
 	Part         *ResponsesReasoningSummaryPart `json:"part,omitempty"`
 }
 
+// GetOpenAIError extracts an OpenAIError from a Responses SSE event, checking
+// the nested response.error first (used by response.failed) and falling back to
+// a top-level error field (used by response.error).
+func (r *ResponsesStreamResponse) GetOpenAIError() *types.OpenAIError {
+	if r == nil {
+		return nil
+	}
+	if r.Response != nil {
+		if oaiErr := r.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
+			return oaiErr
+		}
+	}
+	return GetOpenAIError(r.Error)
+}
+
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
 func GetOpenAIError(errorField any) *types.OpenAIError {
 	if errorField == nil {
@@ -405,8 +422,10 @@ func GetOpenAIError(errorField any) *types.OpenAIError {
 
 	switch err := errorField.(type) {
 	case types.OpenAIError:
+		normalizeOpenAIErrorType(&err)
 		return &err
 	case *types.OpenAIError:
+		normalizeOpenAIErrorType(err)
 		return err
 	case map[string]interface{}:
 		// 处理从JSON解析来的map结构
@@ -423,6 +442,7 @@ func GetOpenAIError(errorField any) *types.OpenAIError {
 		if errCode, ok := err["code"]; ok {
 			openaiErr.Code = errCode
 		}
+		normalizeOpenAIErrorType(openaiErr)
 		return openaiErr
 	case string:
 		// 处理简单字符串错误
@@ -436,5 +456,22 @@ func GetOpenAIError(errorField any) *types.OpenAIError {
 			Type:    "unknown_error",
 			Message: fmt.Sprintf("%v", err),
 		}
+	}
+}
+
+// normalizeOpenAIErrorType populates Type when an upstream error payload (such
+// as OpenAI/Azure Responses response.error) provides code/message without type.
+func normalizeOpenAIErrorType(openaiErr *types.OpenAIError) {
+	if openaiErr == nil || strings.TrimSpace(openaiErr.Type) != "" {
+		return
+	}
+	if openaiErr.Code != nil {
+		if code := strings.TrimSpace(fmt.Sprintf("%v", openaiErr.Code)); code != "" && code != "<nil>" {
+			openaiErr.Type = code
+			return
+		}
+	}
+	if strings.TrimSpace(openaiErr.Message) != "" {
+		openaiErr.Type = "response_error"
 	}
 }

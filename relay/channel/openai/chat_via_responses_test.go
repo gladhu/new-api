@@ -233,3 +233,79 @@ func requireOrderedSubstrings(t *testing.T, s string, parts ...string) {
 		offset += idx + len(part)
 	}
 }
+
+func TestOaiResponsesToChatHandlersSurfaceFailedStreamErrorDetails(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	tests := []struct {
+		name           string
+		eventLine      string
+		wantStatusCode int
+		wantErrorCode  types.ErrorCode
+		wantMessage    string
+	}{
+		{
+			name:           "response.failed with code and message only",
+			eventLine:      `data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"server_error","message":"The server had an error processing your request."}}}`,
+			wantStatusCode: http.StatusInternalServerError,
+			wantErrorCode:  types.ErrorCode("server_error"),
+			wantMessage:    "The server had an error processing your request.",
+		},
+		{
+			name:           "response.failed rate_limit_exceeded maps to 429",
+			eventLine:      `data: {"type":"response.failed","response":{"id":"resp_2","status":"failed","error":{"code":"rate_limit_exceeded","message":"Requests to the Responses API have exceeded the token rate limit."}}}`,
+			wantStatusCode: http.StatusTooManyRequests,
+			wantErrorCode:  types.ErrorCode("rate_limit_exceeded"),
+			wantMessage:    "Requests to the Responses API have exceeded the token rate limit.",
+		},
+		{
+			name:           "response.error with top-level error object",
+			eventLine:      `data: {"type":"response.error","error":{"code":"invalid_prompt","message":"Prompt rejected by safety system."}}`,
+			wantStatusCode: http.StatusInternalServerError,
+			wantErrorCode:  types.ErrorCode("invalid_prompt"),
+			wantMessage:    "Prompt rejected by safety system.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run("stream/"+tt.name, func(t *testing.T) {
+			body := strings.Join([]string{
+				`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-6.1-sol","created_at":1710000000}}`,
+				tt.eventLine,
+				`data: [DONE]`,
+				``,
+			}, "\n")
+			c, _, resp, info := newResponsesChatTestContext(t, body, true)
+
+			usage, apiErr := OaiResponsesToChatStreamHandler(c, info, resp)
+			require.Nil(t, usage)
+			require.NotNil(t, apiErr)
+			assert.Equal(t, tt.wantStatusCode, apiErr.StatusCode)
+			assert.Equal(t, tt.wantErrorCode, apiErr.GetErrorCode())
+			assert.Contains(t, apiErr.Error(), tt.wantMessage)
+		})
+
+		t.Run("buffered/"+tt.name, func(t *testing.T) {
+			body := strings.Join([]string{
+				`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-6.1-sol","created_at":1710000000}}`,
+				tt.eventLine,
+				`data: [DONE]`,
+				``,
+			}, "\n")
+			c, _, resp, info := newResponsesChatTestContext(t, body, false)
+
+			usage, apiErr := OaiResponsesToChatBufferedStreamHandler(c, info, resp)
+			require.Nil(t, usage)
+			require.NotNil(t, apiErr)
+			assert.Equal(t, tt.wantStatusCode, apiErr.StatusCode)
+			assert.Equal(t, tt.wantErrorCode, apiErr.GetErrorCode())
+			assert.Contains(t, apiErr.Error(), tt.wantMessage)
+		})
+	}
+}
