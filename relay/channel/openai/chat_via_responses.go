@@ -38,7 +38,11 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		statusCode := resp.StatusCode
+		if statusCode == http.StatusOK {
+			statusCode = responsesStreamErrorStatusCode(oaiError)
+		}
+		return nil, types.WithOpenAIError(*oaiError, statusCode)
 	}
 
 	chatResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAI, &responsesResp)
@@ -343,8 +347,39 @@ func responsesStreamErrorStatusCode(oaiErr *types.OpenAIError) int {
 	}
 	code := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", oaiErr.Code)))
 	errType := strings.ToLower(strings.TrimSpace(oaiErr.Type))
-	if code == "rate_limit_exceeded" || errType == "rate_limit_exceeded" {
+	if code == "rate_limit_exceeded" || errType == "rate_limit_exceeded" ||
+		code == "insufficient_quota" || errType == "insufficient_quota" {
 		return http.StatusTooManyRequests
 	}
+	if isResponsesClientErrorCode(code) || isResponsesClientErrorCode(errType) || isResponsesContextWindowExceededMessage(oaiErr.Message) {
+		return http.StatusBadRequest
+	}
 	return http.StatusInternalServerError
+}
+
+func isResponsesClientErrorCode(code string) bool {
+	switch code {
+	case "context_length_exceeded",
+		"string_above_max_length",
+		"invalid_prompt",
+		"invalid_request_error",
+		"invalid_encrypted_content",
+		"content_policy_violation",
+		"content_filter",
+		"validation_error":
+		return true
+	default:
+		return false
+	}
+}
+
+func isResponsesContextWindowExceededMessage(message string) bool {
+	msg := strings.ToLower(strings.TrimSpace(message))
+	if msg == "" {
+		return false
+	}
+	return strings.Contains(msg, "exceeds the context window") ||
+		strings.Contains(msg, "maximum context length") ||
+		strings.Contains(msg, "context_length_exceeded") ||
+		(strings.Contains(msg, "context window") && strings.Contains(msg, "exceed"))
 }

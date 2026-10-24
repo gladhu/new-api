@@ -267,9 +267,23 @@ func TestOaiResponsesToChatHandlersSurfaceFailedStreamErrorDetails(t *testing.T)
 		{
 			name:           "response.error with top-level error object",
 			eventLine:      `data: {"type":"response.error","error":{"code":"invalid_prompt","message":"Prompt rejected by safety system."}}`,
-			wantStatusCode: http.StatusInternalServerError,
+			wantStatusCode: http.StatusBadRequest,
 			wantErrorCode:  types.ErrorCode("invalid_prompt"),
 			wantMessage:    "Prompt rejected by safety system.",
+		},
+		{
+			name:           "response.failed context_length_exceeded maps to 400",
+			eventLine:      `data: {"type":"response.failed","response":{"id":"resp_3","status":"failed","error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try again."}}}`,
+			wantStatusCode: http.StatusBadRequest,
+			wantErrorCode:  types.ErrorCode("context_length_exceeded"),
+			wantMessage:    "Your input exceeds the context window of this model. Please adjust your input and try again.",
+		},
+		{
+			name:           "response.failed context window message with generic code maps to 400",
+			eventLine:      `data: {"type":"response.failed","response":{"id":"resp_4","status":"failed","error":{"code":"server_error","message":"Your input exceeds the context window of this model. Please adjust your input and try again."}}}`,
+			wantStatusCode: http.StatusBadRequest,
+			wantErrorCode:  types.ErrorCode("server_error"),
+			wantMessage:    "Your input exceeds the context window of this model. Please adjust your input and try again.",
 		},
 	}
 
