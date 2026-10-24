@@ -215,6 +215,7 @@ func isEncryptedReasoningError(statusCode int, err *types.NewAPIError) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	if strings.Contains(msg, "invalid encrypted reasoning") ||
+		strings.Contains(msg, "encrypted reasoning") ||
 		strings.Contains(msg, "encrypted content could not be decrypted") ||
 		strings.Contains(msg, "encrypted content could not be verified") {
 		return true
@@ -222,6 +223,9 @@ func isEncryptedReasoningError(statusCode int, err *types.NewAPIError) bool {
 	if (strings.Contains(msg, "encrypted content") || strings.Contains(msg, "encrypted_content")) &&
 		(strings.Contains(msg, "could not be verified") ||
 			strings.Contains(msg, "could not be decrypted") ||
+			strings.Contains(msg, "could not be parsed") ||
+			strings.Contains(msg, "different account") ||
+			strings.Contains(msg, "different provider") ||
 			strings.Contains(msg, "decrypt")) {
 		return true
 	}

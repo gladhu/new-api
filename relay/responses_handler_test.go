@@ -46,6 +46,15 @@ func TestIsEncryptedReasoningError(t *testing.T) {
 			want: true,
 		},
 		{
+			name:       "bedrock encrypted reasoning created for a different account or provider",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "encrypted reasoning was created for a different account or provider",
+				Type:    "invalid_request_error",
+			}, http.StatusBadRequest),
+			want: true,
+		},
+		{
 			name:       "openai error code invalid_encrypted_content",
 			statusCode: http.StatusBadRequest,
 			err: types.WithOpenAIError(types.OpenAIError{
