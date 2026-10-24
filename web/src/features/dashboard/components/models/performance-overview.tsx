@@ -23,7 +23,16 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  HEALTH_WINDOW_OPTIONS,
+  type HealthWindowHours,
+} from '@/features/dashboard/constants'
+import {
+  healthWindowTitleKey,
+  useHealthWindowHours,
+} from '@/features/dashboard/hooks/use-health-window'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { weightedSuccessRate } from '@/features/performance-metrics/lib/aggregate'
 import {
   formatLatency,
   formatThroughput,
@@ -32,12 +41,13 @@ import {
   getSuccessRateTextClass,
 } from '@/features/performance-metrics/lib/format'
 import type { PerfModelSummary } from '@/features/performance-metrics/types'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatCompactNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const PERFORMANCE_WINDOW_HOURS = 24
 const TOP_MODEL_LIMIT = 6
 
-type WeightedMetric = 'avg_latency_ms' | 'avg_tps' | 'success_rate'
+type WeightedMetric = 'avg_latency_ms' | 'avg_tps'
 
 type PerformanceSummary = {
   totalRequests: number
@@ -65,8 +75,9 @@ function simpleAverage(
 }
 
 function buildPerformanceSummary(rows: PerfModelSummary[]): PerformanceSummary {
+  const success = weightedSuccessRate(rows)
   return {
-    totalRequests: rows.length,
+    totalRequests: success.requests,
     avgLatencyMs: Math.round(
       simpleAverage(
         rows,
@@ -79,15 +90,16 @@ function buildPerformanceSummary(rows: PerfModelSummary[]): PerformanceSummary {
       'avg_tps',
       (value) => Number.isFinite(value) && value > 0
     ),
-    successRate: simpleAverage(rows, 'success_rate', Number.isFinite),
+    successRate: success.rate,
   }
 }
 
 export function PerformanceOverview() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const [windowHours, setWindowHours] = useHealthWindowHours()
   const metricsQuery = useQuery({
-    queryKey: ['perf-metrics-summary', PERFORMANCE_WINDOW_HOURS],
-    queryFn: () => getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS),
+    queryKey: ['perf-metrics-summary', windowHours],
+    queryFn: () => getPerfMetricsSummary(windowHours),
     staleTime: 60 * 1000,
     retry: false,
   })
@@ -103,8 +115,24 @@ export function PerformanceOverview() {
 
   if (!loading && !hasData) {
     return (
-      <div className='text-muted-foreground overflow-hidden rounded-lg border px-4 py-3 text-center text-xs'>
-        {t('No performance data available')}
+      <div className='overflow-hidden rounded-lg border'>
+        <div className='flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:px-5 sm:py-3'>
+          <div className='flex items-center gap-1.5'>
+            <IconBadge tone='success' size='xs'>
+              <HeartPulse />
+            </IconBadge>
+            <span className='text-xs font-semibold whitespace-nowrap'>
+              {t('Performance health')} · {t(healthWindowTitleKey(windowHours))}
+            </span>
+          </div>
+          <HealthWindowTabs
+            hours={windowHours}
+            onHoursChange={setWindowHours}
+          />
+        </div>
+        <div className='text-muted-foreground px-4 pb-3 text-center text-xs'>
+          {t('No performance data available')}
+        </div>
       </div>
     )
   }
@@ -118,7 +146,7 @@ export function PerformanceOverview() {
             <HeartPulse />
           </IconBadge>
           <span className='text-xs font-semibold whitespace-nowrap'>
-            {t('Performance health')}
+            {t('Performance health')} · {t(healthWindowTitleKey(windowHours))}
           </span>
         </div>
 
@@ -140,7 +168,11 @@ export function PerformanceOverview() {
             <InlineMetric
               icon={HeartPulse}
               label={t('Success rate')}
-              value={formatUptimePct(summary.successRate)}
+              value={formatSuccessRateValue(
+                summary.successRate,
+                summary.totalRequests,
+                toIntlLocale(i18n.resolvedLanguage || i18n.language)
+              )}
               valueClassName={getSuccessRateTextClass(summary.successRate)}
               tone='success'
             />
@@ -162,6 +194,8 @@ export function PerformanceOverview() {
         {/* Separator */}
         <div className='bg-border hidden h-4 w-px lg:block' />
 
+        <HealthWindowTabs hours={windowHours} onHoursChange={setWindowHours} />
+
         {/* Top models inline badges */}
         {!loading && hasData && (
           <div className='flex flex-wrap items-center gap-1.5'>
@@ -171,6 +205,43 @@ export function PerformanceOverview() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function formatSuccessRateValue(
+  rate: number,
+  requests: number,
+  locale: Intl.LocalesArgument
+): string {
+  if (!Number.isFinite(rate) || requests <= 0) return '—'
+  return `${formatUptimePct(rate)} · ${formatCompactNumber(requests, locale)}`
+}
+
+function HealthWindowTabs(props: {
+  hours: HealthWindowHours
+  onHoursChange: (hours: HealthWindowHours) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className='bg-muted/60 inline-flex h-7 overflow-x-auto rounded-lg border p-0.5 sm:h-8'>
+      {HEALTH_WINDOW_OPTIONS.map((option) => (
+        <button
+          key={option.hours}
+          type='button'
+          aria-pressed={props.hours === option.hours}
+          onClick={() => props.onHoursChange(option.hours)}
+          className={cn(
+            'shrink-0 rounded-md px-2.5 text-xs font-medium transition-colors',
+            props.hours === option.hours
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          {t(option.tabKey)}
+        </button>
+      ))}
     </div>
   )
 }

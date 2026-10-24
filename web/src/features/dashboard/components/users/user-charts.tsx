@@ -28,8 +28,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
 import {
+  DAY_TIME_RANGE_PRESETS,
   TIME_GRANULARITY_OPTIONS,
-  TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
 import {
   getDefaultDays,
@@ -163,7 +163,7 @@ export function UserCharts(props: UserChartsProps) {
           className='shrink-0'
         >
           <TabsList>
-            {TIME_RANGE_PRESETS.map((preset) => (
+            {DAY_TIME_RANGE_PRESETS.map((preset) => (
               <TabsTrigger
                 key={preset.days}
                 value={String(preset.days)}

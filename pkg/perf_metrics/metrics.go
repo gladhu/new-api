@@ -84,7 +84,7 @@ func Query(params QueryParams) (QueryResult, error) {
 		params.Hours = 24 * 30
 	}
 	endTs := time.Now().Unix()
-	startTs := endTs - int64(params.Hours)*3600
+	startTs := bucketStart(endTs - int64(params.Hours)*3600)
 
 	merged := map[bucketKey]counters{}
 	rows, err := model.GetPerfMetrics(params.Model, params.Group, startTs, endTs)
@@ -130,7 +130,7 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 		hours = 24 * 30
 	}
 	endTs := time.Now().Unix()
-	startTs := endTs - int64(hours)*3600
+	startTs := bucketStart(endTs - int64(hours)*3600)
 	allowedGroups := allowedGroupSet(groups)
 
 	rows, err := model.GetPerfMetricsSummaryBucketsAll(startTs, endTs, groups)
@@ -189,6 +189,7 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			AvgTps:             math.Round(avgTps*100) / 100,
 			RecentSuccessRates: recentSuccessRates(modelBuckets[name], 3),
 			RequestCount:       total.requestCount,
+			SuccessCount:       total.successCount,
 		})
 	}
 	sort.Slice(models, func(i, j int) bool {
@@ -353,6 +354,8 @@ func bucketPoint(ts int64, value counters) BucketPoint {
 		AvgLatencyMs: avg(value.totalLatencyMs, value.requestCount),
 		SuccessRate:  successRate(value),
 		AvgTps:       avgTps(value),
+		RequestCount: value.requestCount,
+		SuccessCount: value.successCount,
 	}
 }
 

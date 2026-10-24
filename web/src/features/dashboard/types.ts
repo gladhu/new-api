@@ -184,11 +184,14 @@ export interface UptimeGroupResult {
 // Dashboard Filter Types
 // ============================================================================
 
+export type TimeRangePresetId = '1' | '3' | '7' | '14' | '29' | 'month'
+
 export interface DashboardFilters {
   start_timestamp?: Date
   end_timestamp?: Date
   time_granularity?: TimeGranularity
   username?: string
+  time_range_preset?: TimeRangePresetId | null
 }
 
 export type ConsumptionDistributionChartType = 'bar' | 'area'
@@ -198,7 +201,7 @@ export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top'
 export interface DashboardChartPreferences {
   consumptionDistributionChart: ConsumptionDistributionChartType
   modelAnalyticsChart: ModelAnalyticsChartTab
-  defaultTimeRangeDays: number
+  defaultTimeRange: TimeRangePresetId
   defaultTimeGranularity: TimeGranularity
 }
 

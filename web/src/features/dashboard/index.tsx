@@ -16,13 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
-import { computeTimeRange } from '@/lib/time'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { Eye, EyeOff } from 'lucide-react'
+import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '@/stores/auth-store'
-import { ROLE } from '@/lib/roles'
+
+import { SectionPageLayout } from '@/components/layout'
+import { FadeIn } from '@/components/page-transition'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -31,8 +31,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { SectionPageLayout } from '@/components/layout'
-import { FadeIn } from '@/components/page-transition'
+import { ROLE } from '@/lib/roles'
+import { computeTimeRange } from '@/lib/time'
+import { useAuthStore } from '@/stores/auth-store'
+
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
@@ -49,11 +51,11 @@ import {
   DASHBOARD_DEFAULT_SECTION,
   DASHBOARD_SECTION_IDS,
 } from './section-registry'
-import {
-  type DashboardChartPreferences,
-  type DashboardFilters,
-  type QuotaDataItem,
-  type UserChartsFilters,
+import type {
+  DashboardChartPreferences,
+  DashboardFilters,
+  QuotaDataItem,
+  UserChartsFilters,
 } from './types'
 
 const route = getRouteApi('/_authenticated/dashboard/$section')
@@ -82,6 +84,12 @@ const LazyPerformanceOverview = lazy(() =>
   }))
 )
 
+const LazySuccessRateTrendChart = lazy(() =>
+  import('./components/models/success-rate-trend-chart').then((m) => ({
+    default: m.SuccessRateTrendChart,
+  }))
+)
+
 const LazyUserCharts = lazy(() =>
   import('./components/users/user-charts').then((m) => ({
     default: m.UserCharts,
@@ -98,8 +106,8 @@ function LogStatCardsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
       <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className='px-4 py-3.5 sm:px-5 sm:py-4'>
+        {['quota', 'requests', 'tokens', 'rpm', 'tpm'].map((slot) => (
+          <div key={slot} className='px-4 py-3.5 sm:px-5 sm:py-4'>
             <Skeleton className='h-3.5 w-16' />
             <Skeleton className='mt-2 h-7 w-20' />
             <Skeleton className='mt-1.5 h-3.5 w-28' />
@@ -131,15 +139,15 @@ function PerformanceOverviewFallback() {
         <div className='flex items-center gap-2'>
           <Skeleton className='h-4 w-24' />
         </div>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className='flex items-center gap-1.5'>
+        {['success', 'latency', 'throughput'].map((metric) => (
+          <div key={metric} className='flex items-center gap-1.5'>
             <Skeleton className='h-3 w-14' />
             <Skeleton className='h-4 w-16' />
           </div>
         ))}
         <div className='ml-auto flex items-center gap-2'>
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Skeleton key={i} className='h-5 w-28 rounded-full' />
+          {['primary', 'secondary'].map((badge) => (
+            <Skeleton key={badge} className='h-5 w-28 rounded-full' />
           ))}
         </div>
       </div>
@@ -341,11 +349,18 @@ export function Dashboard() {
                 </Suspense>
               </FadeIn>
               {isAdmin && (
-                <FadeIn delay={0.05}>
-                  <Suspense fallback={<PerformanceOverviewFallback />}>
-                    <LazyPerformanceOverview />
-                  </Suspense>
-                </FadeIn>
+                <>
+                  <FadeIn delay={0.05}>
+                    <Suspense fallback={<PerformanceOverviewFallback />}>
+                      <LazyPerformanceOverview />
+                    </Suspense>
+                  </FadeIn>
+                  <FadeIn delay={0.08}>
+                    <Suspense fallback={<ModelChartsFallback />}>
+                      <LazySuccessRateTrendChart />
+                    </Suspense>
+                  </FadeIn>
+                </>
               )}
               <FadeIn delay={0.1}>
                 <Suspense fallback={<ModelChartsFallback />}>

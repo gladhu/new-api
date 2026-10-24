@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/QuantumNous/new-api/common"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
@@ -27,6 +28,13 @@ func GetPerfMetricsSummary(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+
+	if c.GetInt("role") < common.RoleAdminUser {
+		for i := range result.Models {
+			result.Models[i].RequestCount = 0
+			result.Models[i].SuccessCount = 0
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -66,6 +74,14 @@ func GetPerfMetrics(c *gin.Context) {
 	}
 
 	result.Groups = filterActiveGroups(result.Groups)
+	if c.GetInt("role") < common.RoleAdminUser {
+		for i := range result.Groups {
+			for j := range result.Groups[i].Series {
+				result.Groups[i].Series[j].RequestCount = 0
+				result.Groups[i].Series[j].SuccessCount = 0
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

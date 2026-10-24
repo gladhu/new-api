@@ -113,6 +113,32 @@ export function getCalendarDayRangeInclusive(
 }
 
 /**
+ * Inclusive local calendar month: the 1st 00:00:00 through `fromDate` 23:59:59.999.
+ */
+export function getCalendarMonthRange(fromDate: Date = new Date()): {
+  start: Date
+  end: Date
+} {
+  const start = getStartOfDay(
+    new Date(fromDate.getFullYear(), fromDate.getMonth(), 1)
+  )
+  return { start, end: getEndOfDay(fromDate) }
+}
+
+export function isCurrentCalendarMonthRange(
+  start?: Date,
+  end?: Date,
+  fromDate: Date = new Date()
+): boolean {
+  if (!start || !end) return false
+  const expected = getCalendarMonthRange(fromDate)
+  return (
+    start.getTime() === expected.start.getTime() &&
+    end.getTime() === expected.end.getTime()
+  )
+}
+
+/**
  * Compute time range as Unix timestamps (seconds)
  * @param days Default number of days if no dates provided
  * @param startDate Optional start date

@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import { weightedSuccessRate } from '@/features/performance-metrics/lib/aggregate'
 import {
   formatLatency,
   formatThroughput,
@@ -32,12 +33,14 @@ import {
   getSuccessRateTextClass,
 } from '@/features/performance-metrics/lib/format'
 import type { PerfModelSummary } from '@/features/performance-metrics/types'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatCompactNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 const PERFORMANCE_WINDOW_HOURS = 24
 const TOP_MODEL_LIMIT = 6
 
-type WeightedMetric = 'avg_latency_ms' | 'avg_tps' | 'success_rate'
+type WeightedMetric = 'avg_latency_ms' | 'avg_tps'
 
 function simpleAverage(
   rows: PerfModelSummary[],
@@ -56,7 +59,7 @@ function simpleAverage(
 }
 
 export function PerformanceHealthPanel() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics-summary', PERFORMANCE_WINDOW_HOURS],
     queryFn: () => getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS),
@@ -83,7 +86,7 @@ export function PerformanceHealthPanel() {
         'avg_tps',
         (v) => Number.isFinite(v) && v > 0
       ),
-      successRate: simpleAverage(models, 'success_rate', Number.isFinite),
+      ...weightedSuccessRate(models),
     }
   }, [models])
 
@@ -108,9 +111,16 @@ export function PerformanceHealthPanel() {
           <MetricCell
             icon={HeartPulse}
             label={t('Success rate')}
-            value={formatUptimePct(summary.successRate)}
+            value={
+              Number.isFinite(summary.rate) && summary.requests > 0
+                ? `${formatUptimePct(summary.rate)} · ${formatCompactNumber(
+                    summary.requests,
+                    toIntlLocale(i18n.resolvedLanguage || i18n.language)
+                  )}`
+                : '—'
+            }
             loading={loading}
-            valueClassName={getSuccessRateTextClass(summary.successRate)}
+            valueClassName={getSuccessRateTextClass(summary.rate)}
             tone='success'
           />
           <MetricCell

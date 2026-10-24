@@ -564,6 +564,21 @@ export const STATIC_I18N_KEYS = [
   'The model that was requested',
   'The upstream channel that served the requests',
 
+  // Dashboard time ranges & health windows
+  '1 Day',
+  '3 Days',
+  '7 Days',
+  '14 Days',
+  '29 Days',
+  'This Month',
+  '1 Hour',
+  '6 Hours',
+  '24 Hours',
+  'Last 1 hour',
+  'Last 6 hours',
+  'Last 24 hours',
+  'Last 7 days',
+
   // Misc
   'Cancel',
   'Status',

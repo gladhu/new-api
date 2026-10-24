@@ -16,10 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { TimeGranularity } from '@/lib/time'
-import { getCalendarDayRangeInclusive } from '@/lib/time'
 import {
   DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
+  DAY_TIME_RANGE_PRESETS,
   DEFAULT_DASHBOARD_CHART_PREFERENCES,
   DEFAULT_TIME_GRANULARITY,
   EMPTY_DASHBOARD_FILTERS,
@@ -32,7 +31,14 @@ import type {
   DashboardChartPreferences,
   DashboardFilters,
   ModelAnalyticsChartTab,
+  TimeRangePresetId,
 } from '@/features/dashboard/types'
+import {
+  getCalendarDayRangeInclusive,
+  getCalendarMonthRange,
+  isCurrentCalendarMonthRange,
+  type TimeGranularity,
+} from '@/lib/time'
 
 function isTimeGranularity(value: unknown): value is TimeGranularity {
   return value === 'hour' || value === 'day' || value === 'week'
@@ -56,8 +62,81 @@ function isModelAnalyticsChartTab(
   return value === 'trend' || value === 'proportion' || value === 'top'
 }
 
-function isTimeRangePresetDays(value: unknown): value is number {
-  return TIME_RANGE_PRESETS.some((preset) => preset.days === value)
+function isTimeRangePresetId(value: unknown): value is TimeRangePresetId {
+  return TIME_RANGE_PRESETS.some((preset) => preset.id === value)
+}
+
+export function getRangeForTimeRangePreset(
+  id: TimeRangePresetId,
+  fromDate: Date = new Date()
+): { start: Date; end: Date } {
+  if (id === 'month') return getCalendarMonthRange(fromDate)
+  const days = TIME_RANGE_PRESETS.find((preset) => preset.id === id)?.days ?? 1
+  return getCalendarDayRangeInclusive(days, fromDate)
+}
+
+export function granularityForTimeRangePreset(
+  id: TimeRangePresetId
+): TimeGranularity {
+  if (id === 'month') return 'day'
+  const days = TIME_RANGE_PRESETS.find((preset) => preset.id === id)?.days ?? 1
+  if (days <= 1) return 'hour'
+  if (days >= 29) return 'week'
+  return 'day'
+}
+
+export function detectQuickRangePreset(
+  filters?: DashboardFilters,
+  fromDate: Date = new Date()
+): TimeRangePresetId | null {
+  if (!filters || filters.time_range_preset === null) {
+    return null
+  }
+  if (
+    filters.time_range_preset &&
+    isTimeRangePresetId(filters.time_range_preset)
+  ) {
+    return filters.time_range_preset
+  }
+  if (
+    isCurrentCalendarMonthRange(
+      filters.start_timestamp,
+      filters.end_timestamp,
+      fromDate
+    )
+  ) {
+    return 'month'
+  }
+  const start = filters.start_timestamp
+  const end = filters.end_timestamp
+  if (!start || !end) return null
+  for (const preset of DAY_TIME_RANGE_PRESETS) {
+    const expected = getCalendarDayRangeInclusive(preset.days, fromDate)
+    if (
+      start.getTime() === expected.start.getTime() &&
+      end.getTime() === expected.end.getTime()
+    ) {
+      return preset.id
+    }
+  }
+  return null
+}
+
+function parseDefaultTimeRange(
+  parsed: Partial<DashboardChartPreferences> & {
+    defaultTimeRangeDays?: unknown
+  }
+): TimeRangePresetId {
+  if (isTimeRangePresetId(parsed.defaultTimeRange)) {
+    return parsed.defaultTimeRange
+  }
+  if (typeof parsed.defaultTimeRangeDays === 'number') {
+    const match = TIME_RANGE_PRESETS.find(
+      (preset) => preset.days === parsed.defaultTimeRangeDays
+    )
+    if (match) return match.id
+  }
+  return DEFAULT_DASHBOARD_CHART_PREFERENCES.defaultTimeRange
 }
 
 export function cleanFilters<T extends Record<string, unknown>>(
@@ -114,9 +193,7 @@ export function getSavedChartPreferences(): DashboardChartPreferences {
       modelAnalyticsChart: isModelAnalyticsChartTab(parsed.modelAnalyticsChart)
         ? parsed.modelAnalyticsChart
         : fallbackPreferences.modelAnalyticsChart,
-      defaultTimeRangeDays: isTimeRangePresetDays(parsed.defaultTimeRangeDays)
-        ? parsed.defaultTimeRangeDays
-        : fallbackPreferences.defaultTimeRangeDays,
+      defaultTimeRange: parseDefaultTimeRange(parsed),
       defaultTimeGranularity: isTimeGranularity(parsed.defaultTimeGranularity)
         ? parsed.defaultTimeGranularity
         : fallbackPreferences.defaultTimeGranularity,
@@ -137,21 +214,28 @@ export function saveChartPreferences(
 }
 
 export function getDefaultDays(granularity?: TimeGranularity): number {
-  if (!granularity) return getSavedChartPreferences().defaultTimeRangeDays
+  if (!granularity) {
+    const preset = getSavedChartPreferences().defaultTimeRange
+    return (
+      TIME_RANGE_PRESETS.find((item) => item.id === preset)?.days ??
+      TIME_RANGE_BY_GRANULARITY.day
+    )
+  }
   return TIME_RANGE_BY_GRANULARITY[getSavedGranularity(granularity)]
 }
 
 export function buildDefaultDashboardFilters(
   preferences: DashboardChartPreferences = getSavedChartPreferences()
 ): DashboardFilters {
-  const { start, end } = getCalendarDayRangeInclusive(
-    preferences.defaultTimeRangeDays
+  const { start, end } = getRangeForTimeRangePreset(
+    preferences.defaultTimeRange
   )
   return {
     ...EMPTY_DASHBOARD_FILTERS,
     start_timestamp: start,
     end_timestamp: end,
     time_granularity: preferences.defaultTimeGranularity,
+    time_range_preset: preferences.defaultTimeRange,
   }
 }
 
