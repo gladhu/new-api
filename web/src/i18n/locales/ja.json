@@ -2096,6 +2096,7 @@
     "Filter models...": "モデルをフィルタリング...",
     "Filter the model analytics view by time range and user.": "時間範囲とユーザーでモデル分析ビューを絞り込みます。",
     "Filter the traffic flow view by time range and user.": "時間範囲とユーザーでトラフィックフロー表示を絞り込みます。",
+    "Filter the traffic flow view by time range, model, and user.": "時間範囲、モデル名、ユーザーでトラフィックフロー表示を絞り込みます。",
     "Filter...": "フィルター…",
     "Filters": "フィルター",
     "Filters active": "フィルター有効",

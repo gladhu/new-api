@@ -117,6 +117,70 @@ func TestGetUserFlowQuotaDatesRestrictsToAuthenticatedUser(t *testing.T) {
 	require.Empty(t, payload.Data[0].ChannelName)
 }
 
+func TestGetAllFlowQuotaDatesFiltersByExactModelName(t *testing.T) {
+	setupFlowControllerTestDB(t)
+	require.NoError(t, model.DB.Create(&model.QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		NodeName:  "node-a",
+		TokenID:   11,
+		UseGroup:  "default",
+		ChannelID: 1,
+		ModelName: "100%off",
+		CreatedAt: 1300,
+		Count:     1,
+		Quota:     5,
+		TokenUsed: 1,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("role", common.RoleRootUser)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/data/flow?start_timestamp=1000&end_timestamp=2000&model_name=%20gpt-a%20", nil)
+
+	GetAllFlowQuotaDates(ctx)
+
+	payload := decodeFlowQuotaResponse(t, recorder)
+	require.Len(t, payload.Data, 1)
+	require.Equal(t, "gpt-a", payload.Data[0].ModelName)
+	require.Equal(t, "alice", payload.Data[0].Username)
+
+	wildcard := httptest.NewRecorder()
+	wildcardCtx, _ := gin.CreateTestContext(wildcard)
+	wildcardCtx.Set("role", common.RoleRootUser)
+	wildcardCtx.Request = httptest.NewRequest(http.MethodGet, "/api/data/flow?start_timestamp=1000&end_timestamp=2000&model_name=100%25", nil)
+
+	GetAllFlowQuotaDates(wildcardCtx)
+
+	wildcardPayload := decodeFlowQuotaResponse(t, wildcard)
+	require.Empty(t, wildcardPayload.Data)
+}
+
+func TestGetUserFlowQuotaDatesFiltersByExactModelName(t *testing.T) {
+	setupFlowControllerTestDB(t)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("id", 1)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/data/flow/self?start_timestamp=1000&end_timestamp=2000&model_name=gpt-b", nil)
+
+	GetUserFlowQuotaDates(ctx)
+
+	payload := decodeFlowQuotaResponse(t, recorder)
+	require.Empty(t, payload.Data)
+
+	matched := httptest.NewRecorder()
+	matchedCtx, _ := gin.CreateTestContext(matched)
+	matchedCtx.Set("id", 1)
+	matchedCtx.Request = httptest.NewRequest(http.MethodGet, "/api/data/flow/self?start_timestamp=1000&end_timestamp=2000&model_name=gpt-a", nil)
+
+	GetUserFlowQuotaDates(matchedCtx)
+
+	matchedPayload := decodeFlowQuotaResponse(t, matched)
+	require.Len(t, matchedPayload.Data, 1)
+	require.Equal(t, "gpt-a", matchedPayload.Data[0].ModelName)
+}
+
 func TestGetUserFlowQuotaDatesRejectsInvalidTimeRange(t *testing.T) {
 	setupFlowControllerTestDB(t)
 

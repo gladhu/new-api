@@ -2096,6 +2096,7 @@
     "Filter models...": "Lọc mô hình...",
     "Filter the model analytics view by time range and user.": "Lọc chế độ xem phân tích mô hình theo khoảng thời gian và người dùng.",
     "Filter the traffic flow view by time range and user.": "Lọc chế độ xem luồng lưu lượng theo khoảng thời gian và người dùng.",
+    "Filter the traffic flow view by time range, model, and user.": "Lọc chế độ xem luồng lưu lượng theo khoảng thời gian, mô hình và người dùng.",
     "Filter...": "Lọc...",
     "Filters": "Bộ lọc",
     "Filters active": "Bộ lọc đang bật",

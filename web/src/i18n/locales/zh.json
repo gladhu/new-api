@@ -2096,6 +2096,7 @@
     "Filter models...": "筛选模型...",
     "Filter the model analytics view by time range and user.": "按时间范围和用户筛选模型分析视图。",
     "Filter the traffic flow view by time range and user.": "按时间范围和用户筛选分流图视图。",
+    "Filter the traffic flow view by time range, model, and user.": "按时间范围、模型名和用户筛选分流图视图。",
     "Filter...": "筛选...",
     "Filters": "筛选器",
     "Filters active": "筛选已启用",

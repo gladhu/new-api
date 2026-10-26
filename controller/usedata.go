@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -91,7 +92,8 @@ func GetAllFlowQuotaDates(c *gin.Context) {
 		return
 	}
 	username := c.Query("username")
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, 0, c.GetInt("role"))
+	modelName := strings.TrimSpace(c.Query("model_name"))
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, modelName, 0, c.GetInt("role"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -117,7 +119,8 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser)
+	modelName := strings.TrimSpace(c.Query("model_name"))
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", modelName, userId, common.RoleCommonUser)
 	if err != nil {
 		common.ApiError(c, err)
 		return

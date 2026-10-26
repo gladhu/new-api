@@ -303,8 +303,9 @@ export function Dashboard() {
           currentFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
+          includeModelName
           titleKey='Flow Filters'
-          descriptionKey='Filter the traffic flow view by time range and user.'
+          descriptionKey='Filter the traffic flow view by time range, model, and user.'
         />
       </>
     ) : null

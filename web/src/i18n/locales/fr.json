@@ -2096,6 +2096,7 @@
     "Filter models...": "Filtrer les modèles...",
     "Filter the model analytics view by time range and user.": "Filtrez la vue d’analyse des modèles par période et utilisateur.",
     "Filter the traffic flow view by time range and user.": "Filtrez la vue du flux de trafic par plage horaire et utilisateur.",
+    "Filter the traffic flow view by time range, model, and user.": "Filtrez la vue du flux de trafic par plage horaire, modèle et utilisateur.",
     "Filter...": "Filtrer...",
     "Filters": "Filtres",
     "Filters active": "Filtres actifs",

@@ -87,7 +87,7 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 		TokenUsed: 999,
 	})
 
-	rootRows, err := GetFlowQuotaData(900, 2000, "", 0, common.RoleRootUser)
+	rootRows, err := GetFlowQuotaData(900, 2000, "", "", 0, common.RoleRootUser)
 	require.NoError(t, err)
 	require.Len(t, rootRows, 3)
 	// Token 11 was soft-deleted, so its name is intentionally left empty for the
@@ -110,7 +110,7 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	require.Equal(t, 22, rootRows[1].TokenID)
 	require.Equal(t, "backup", rootRows[1].TokenName)
 
-	adminRows, err := GetFlowQuotaData(900, 2000, "alice", 0, common.RoleAdminUser)
+	adminRows, err := GetFlowQuotaData(900, 2000, "alice", "", 0, common.RoleAdminUser)
 	require.NoError(t, err)
 	require.Len(t, adminRows, 2)
 	require.Equal(t, 0, adminRows[0].TokenID)
@@ -121,7 +121,7 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	require.Equal(t, "east", adminRows[0].ChannelName)
 	require.Equal(t, 150, adminRows[0].Quota)
 
-	selfRows, err := GetFlowQuotaData(900, 2000, "", 1, common.RoleCommonUser)
+	selfRows, err := GetFlowQuotaData(900, 2000, "", "", 1, common.RoleCommonUser)
 	require.NoError(t, err)
 	require.Len(t, selfRows, 1)
 	require.Empty(t, selfRows[0].Username)
@@ -130,6 +130,74 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	require.Empty(t, selfRows[0].TokenName)
 	require.Equal(t, "vip", selfRows[0].UseGroup)
 	require.Equal(t, 175, selfRows[0].Quota)
+}
+
+func TestGetFlowQuotaDataFiltersByExactModelName(t *testing.T) {
+	truncateTables(t)
+
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		UseGroup:  "vip",
+		ModelName: "gpt-a",
+		CreatedAt: 1000,
+		Count:     1,
+		Quota:     10,
+		TokenUsed: 1,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    2,
+		Username:  "bob",
+		UseGroup:  "vip",
+		ModelName: "gpt-b",
+		CreatedAt: 1000,
+		Count:     1,
+		Quota:     20,
+		TokenUsed: 2,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "alice",
+		UseGroup:  "vip",
+		ModelName: "100%off",
+		CreatedAt: 1100,
+		Count:     1,
+		Quota:     5,
+		TokenUsed: 1,
+	})
+
+	rootRows, err := GetFlowQuotaData(900, 2000, "", "gpt-a", 0, common.RoleRootUser)
+	require.NoError(t, err)
+	require.Len(t, rootRows, 1)
+	require.Equal(t, "alice", rootRows[0].Username)
+	require.Equal(t, "gpt-a", rootRows[0].ModelName)
+
+	adminMiss, err := GetFlowQuotaData(900, 2000, "bob", "gpt-a", 0, common.RoleAdminUser)
+	require.NoError(t, err)
+	require.Empty(t, adminMiss)
+
+	adminHit, err := GetFlowQuotaData(900, 2000, "bob", "gpt-b", 0, common.RoleAdminUser)
+	require.NoError(t, err)
+	require.Len(t, adminHit, 1)
+	require.Equal(t, "gpt-b", adminHit[0].ModelName)
+
+	selfMiss, err := GetFlowQuotaData(900, 2000, "", "gpt-b", 1, common.RoleCommonUser)
+	require.NoError(t, err)
+	require.Empty(t, selfMiss)
+
+	selfHit, err := GetFlowQuotaData(900, 2000, "", "gpt-a", 1, common.RoleCommonUser)
+	require.NoError(t, err)
+	require.Len(t, selfHit, 1)
+	require.Equal(t, "gpt-a", selfHit[0].ModelName)
+
+	literalRows, err := GetFlowQuotaData(900, 2000, "", "100%off", 0, common.RoleRootUser)
+	require.NoError(t, err)
+	require.Len(t, literalRows, 1)
+	require.Equal(t, "100%off", literalRows[0].ModelName)
+
+	wildcardRows, err := GetFlowQuotaData(900, 2000, "", "100%", 0, common.RoleRootUser)
+	require.NoError(t, err)
+	require.Empty(t, wildcardRows)
 }
 
 func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {

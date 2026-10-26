@@ -23,6 +23,7 @@ import {
   DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
 } from '@/features/dashboard/constants'
 import {
+  buildQueryParams,
   detectQuickRangePreset,
   getRangeForTimeRangePreset,
   getSavedChartPreferences,
@@ -31,6 +32,35 @@ import {
 import { getCalendarMonthRange } from '@/lib/time'
 
 const fromDate = new Date(2026, 9, 24, 15, 30, 0)
+
+describe('buildQueryParams', () => {
+  const timeRange = { start_timestamp: 1000, end_timestamp: 2000 }
+
+  test('includes an exact model name for the flow query', () => {
+    expect(
+      buildQueryParams(timeRange, {
+        time_granularity: 'day',
+        username: 'alice',
+        model_name: 'gpt-4o',
+      })
+    ).toMatchObject({
+      start_timestamp: 1000,
+      end_timestamp: 2000,
+      default_time: 'day',
+      username: 'alice',
+      model_name: 'gpt-4o',
+    })
+  })
+
+  test('omits a blank model name', () => {
+    expect(
+      buildQueryParams(timeRange, {
+        time_granularity: 'day',
+        model_name: '',
+      }).model_name
+    ).toBeUndefined()
+  })
+})
 
 describe('granularityForTimeRangePreset', () => {
   test('maps one day to hour buckets', () => {

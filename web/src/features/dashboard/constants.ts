@@ -93,5 +93,6 @@ export const EMPTY_DASHBOARD_FILTERS: DashboardFilters = {
   end_timestamp: undefined,
   time_granularity: 'day',
   username: '',
+  model_name: '',
   time_range_preset: null,
 }

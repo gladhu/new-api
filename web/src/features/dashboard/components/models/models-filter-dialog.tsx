@@ -63,6 +63,7 @@ interface ModelsFilterProps {
   onReset: () => void
   titleKey?: string
   descriptionKey?: string
+  includeModelName?: boolean
 }
 
 /**
@@ -176,7 +177,9 @@ export function ModelsFilter(props: ModelsFilterProps) {
           'Filter the model analytics view by time range and user.'
       )}
       contentClassName='max-sm:h-dvh max-sm:w-screen max-sm:max-w-none max-sm:rounded-none max-sm:p-4 sm:max-w-lg'
-      contentHeight='min(48vh, 460px)'
+      contentHeight={
+        props.includeModelName ? 'min(56vh, 540px)' : 'min(48vh, 460px)'
+      }
       footerClassName='grid grid-cols-2 gap-2 sm:flex'
       footer={
         <>
@@ -274,6 +277,18 @@ export function ModelsFilter(props: ModelsFilterProps) {
               </SelectContent>
             </Select>
           </div>
+
+          {props.includeModelName && (
+            <div className='grid gap-2'>
+              <Label htmlFor='model_name'>{t('Model Name')}</Label>
+              <Input
+                id='model_name'
+                placeholder={t('Filter by model name...')}
+                value={filters.model_name ?? ''}
+                onChange={(e) => handleChange('model_name', e.target.value)}
+              />
+            </div>
+          )}
 
           {/* Admin-only fields */}
           {isAdmin && (

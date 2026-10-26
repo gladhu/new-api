@@ -191,6 +191,7 @@ export interface DashboardFilters {
   end_timestamp?: Date
   time_granularity?: TimeGranularity
   username?: string
+  model_name?: string
   time_range_preset?: TimeRangePresetId | null
 }
 

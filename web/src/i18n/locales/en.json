@@ -2096,6 +2096,7 @@
     "Filter models...": "Filter models...",
     "Filter the model analytics view by time range and user.": "Filter the model analytics view by time range and user.",
     "Filter the traffic flow view by time range and user.": "Filter the traffic flow view by time range and user.",
+    "Filter the traffic flow view by time range, model, and user.": "Filter the traffic flow view by time range, model, and user.",
     "Filter...": "Filter...",
     "Filters": "Filters",
     "Filters active": "Filters active",
