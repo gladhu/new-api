@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,6 +101,132 @@ func TestWriteUsageLogsXLSX_slimColumns(t *testing.T) {
 	require.Equal(t, "0.0002", joined[15])
 	require.Equal(t, "0.0008", joined[16])
 	require.Equal(t, "0.02469", joined[17])
+}
+
+func TestWriteUsageLogsXLSX_detailedColumns(t *testing.T) {
+	oldQuota := common.QuotaPerUnit
+	common.QuotaPerUnit = 500000
+	t.Cleanup(func() { common.QuotaPerUnit = oldQuota })
+
+	logs := []*model.Log{
+		{
+			Id:                99,
+			UserId:            1,
+			Username:          "alice",
+			Type:              model.LogTypeConsume,
+			CreatedAt:         1700000000,
+			TokenName:         "tok",
+			Group:             "default",
+			ModelName:         "gpt-4",
+			PromptTokens:      1000,
+			CompletionTokens:  200,
+			Quota:             12345,
+			UseTime:           4,
+			IsStream:          true,
+			ChannelId:         8,
+			ChannelName:       "secret-channel",
+			Ip:                "1.2.3.4",
+			RequestId:         "req-9",
+			UpstreamRequestId: "up-9",
+			Content:           "should-appear",
+			Other: `{
+				"model_ratio": 1,
+				"group_ratio": 1,
+				"completion_ratio": 2,
+				"cache_ratio": 0.5,
+				"cache_creation_ratio": 1.25,
+				"cache_tokens": 100,
+				"cache_creation_tokens": 200,
+				"cache_write_tokens": 200,
+				"image_output": 50,
+				"image_ratio": 2,
+				"model_price": 0
+			}`,
+		},
+	}
+	file, err := newUsageLogsDetailedWorkbook(logs, time.UTC)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = file.Close() })
+
+	rows, err := file.GetRows("usage")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, []string{
+		"log_id",
+		"created_time",
+		"log_type",
+		"user_id",
+		"username",
+		"token_name",
+		"group",
+		"model_name",
+		"prompt_tokens",
+		"infact_prompt_tokens",
+		"cached_tokens",
+		"cached_write_tokens",
+		"cached_read_tokens",
+		"output_image_tokens",
+		"completion_tokens",
+		"infact_completion_tokens",
+		"input_price",
+		"cached_tokens_price",
+		"cached_write_tokens_price",
+		"cached_read_tokens_price",
+		"output_image_price",
+		"output_price",
+		"cost",
+		"quota",
+		"use_time",
+		"is_stream",
+		"channel_id",
+		"channel_name",
+		"ip",
+		"request_id",
+		"upstream_request_id",
+		"content",
+		"other",
+	}, rows[0])
+	require.Equal(t, len(rows[0]), len(rows[1]))
+
+	joined := rows[1]
+	require.Equal(t, "99", joined[0])
+	require.Equal(t, "2023-11-14 22:13:20", joined[1])
+	require.Equal(t, "consume", joined[2])
+	require.Equal(t, "1", joined[3])
+	require.Equal(t, "alice", joined[4])
+	require.Equal(t, "tok", joined[5])
+	require.Equal(t, "default", joined[6])
+	require.Equal(t, "gpt-4", joined[7])
+	require.Equal(t, "0.02469", joined[22])
+	require.Equal(t, "12345", joined[23])
+	require.Equal(t, "4", joined[24])
+	require.Equal(t, "TRUE", joined[25])
+	require.Equal(t, "8", joined[26])
+	require.Equal(t, "secret-channel", joined[27])
+	require.Equal(t, "1.2.3.4", joined[28])
+	require.Equal(t, "req-9", joined[29])
+	require.Equal(t, "up-9", joined[30])
+	require.Equal(t, "should-appear", joined[31])
+	require.Contains(t, joined[32], `"cache_tokens": 100`)
+}
+
+func TestTruncateExcelCell_keepsWorkbookWithinCellLimit(t *testing.T) {
+	long := strings.Repeat("测", excelCellMaxChars+8)
+	require.Equal(t, excelCellMaxChars, len([]rune(truncateExcelCell(long))))
+	require.Equal(t, "short", truncateExcelCell("short"))
+
+	file, err := newUsageLogsDetailedWorkbook([]*model.Log{{
+		Content: long,
+		Other:   long,
+	}}, time.UTC)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = file.Close() })
+
+	rows, err := file.GetRows("usage")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, excelCellMaxChars, len([]rune(rows[1][31])))
+	require.Equal(t, excelCellMaxChars, len([]rune(rows[1][32])))
 }
 
 func TestWriteUsageLogsXLSX_claudeKeepsPromptAndPricesCacheWriteSplit(t *testing.T) {

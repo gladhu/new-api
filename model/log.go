@@ -571,6 +571,12 @@ const adminUserLogExportMaxRows = 1000000
 // usageLogExportColumns are the only log fields needed to build the slim Excel export.
 const usageLogExportColumns = "logs.created_at, logs.model_name, logs.token_name, logs.prompt_tokens, logs.completion_tokens, logs.quota, logs.other"
 
+// usageLogDetailedExportColumns returns every field needed for an admin detailed export.
+// Group quoting is resolved at call time because InitColumnNames runs after package init.
+func usageLogDetailedExportColumns() string {
+	return "logs.id, logs.user_id, logs.created_at, logs.type, logs.content, logs.username, logs.token_name, logs.model_name, logs.quota, logs.prompt_tokens, logs.completion_tokens, logs.use_time, logs.is_stream, logs.channel_id, logs." + logGroupCol + ", logs.ip, logs.request_id, logs.upstream_request_id, logs.other"
+}
+
 // LogListFilter describes list/export query filters for usage logs.
 type LogListFilter struct {
 	UserId         int
@@ -584,6 +590,8 @@ type LogListFilter struct {
 	Group          string
 	RequestId      string
 	ForAdmin       bool
+	// Detailed selects the full admin export columns. It is ignored unless ForAdmin is set.
+	Detailed bool
 }
 
 func applyLogListFilters(tx *gorm.DB, f LogListFilter) (*gorm.DB, error) {
@@ -655,11 +663,21 @@ func GetLogsForExport(ctx context.Context, f LogListFilter, maxRows int) (logs [
 	}
 	logger.LogInfo(ctx, "usage log export stage=query begin")
 	queryStarted := time.Now()
-	err = tx.Select(usageLogExportColumns).Order("logs.id desc").Limit(maxRows).Find(&logs).Error
+	columns := usageLogExportColumns
+	detailed := f.ForAdmin && f.Detailed
+	if detailed {
+		columns = usageLogDetailedExportColumns()
+	}
+	err = tx.Select(columns).Order("logs.id desc").Limit(maxRows).Find(&logs).Error
 	logUsageExportStage(ctx, "query", int64(len(logs)), time.Since(queryStarted))
 	if err != nil {
 		common.SysError("failed to query logs for export: " + err.Error())
 		return nil, total, errors.New("查询日志失败")
+	}
+	if detailed {
+		if err = fillLogChannelNames(logs); err != nil {
+			return nil, total, err
+		}
 	}
 	return logs, total, nil
 }

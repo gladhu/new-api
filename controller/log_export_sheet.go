@@ -43,6 +43,42 @@ var usageLogExportHeaders = []interface{}{
 	"cost",
 }
 
+var usageLogDetailedExportHeaders = []interface{}{
+	"log_id",
+	"created_time",
+	"log_type",
+	"user_id",
+	"username",
+	"token_name",
+	"group",
+	"model_name",
+	"prompt_tokens",
+	"infact_prompt_tokens",
+	"cached_tokens",
+	"cached_write_tokens",
+	"cached_read_tokens",
+	"output_image_tokens",
+	"completion_tokens",
+	"infact_completion_tokens",
+	"input_price",
+	"cached_tokens_price",
+	"cached_write_tokens_price",
+	"cached_read_tokens_price",
+	"output_image_price",
+	"output_price",
+	"cost",
+	"quota",
+	"use_time",
+	"is_stream",
+	"channel_id",
+	"channel_name",
+	"ip",
+	"request_id",
+	"upstream_request_id",
+	"content",
+	"other",
+}
+
 func writeUsageLogsXLSX(ctx context.Context, w io.Writer, logs []*model.Log, loc *time.Location) error {
 	logger.LogInfo(ctx, fmt.Sprintf("usage log export stage=workbook begin rows=%d", len(logs)))
 	buildStarted := time.Now()
@@ -119,6 +155,21 @@ func newUsageLogsWorkbook(logs []*model.Log, loc *time.Location) (*excelize.File
 	if loc == nil {
 		loc = time.Local
 	}
+	return newUsageLogsSheet(usageLogExportHeaders, len(logs), func(i int) []interface{} {
+		return usageLogExportRow(logs[i], loc)
+	})
+}
+
+func newUsageLogsDetailedWorkbook(logs []*model.Log, loc *time.Location) (*excelize.File, error) {
+	if loc == nil {
+		loc = time.Local
+	}
+	return newUsageLogsSheet(usageLogDetailedExportHeaders, len(logs), func(i int) []interface{} {
+		return usageLogDetailedExportRow(logs[i], loc)
+	})
+}
+
+func newUsageLogsSheet(headers []interface{}, rows int, rowAt func(i int) []interface{}) (*excelize.File, error) {
 	file := excelize.NewFile()
 	const sheet = "usage"
 	if err := file.SetSheetName("Sheet1", sheet); err != nil {
@@ -130,17 +181,17 @@ func newUsageLogsWorkbook(logs []*model.Log, loc *time.Location) (*excelize.File
 		file.Close()
 		return nil, err
 	}
-	if err = writer.SetRow("A1", usageLogExportHeaders); err != nil {
+	if err = writer.SetRow("A1", headers); err != nil {
 		file.Close()
 		return nil, err
 	}
-	for i, lg := range logs {
+	for i := 0; i < rows; i++ {
 		cell, cellErr := excelize.CoordinatesToCellName(1, i+2)
 		if cellErr != nil {
 			file.Close()
 			return nil, cellErr
 		}
-		if err = writer.SetRow(cell, usageLogExportRow(lg, loc)); err != nil {
+		if err = writer.SetRow(cell, rowAt(i)); err != nil {
 			file.Close()
 			return nil, err
 		}
@@ -201,6 +252,69 @@ func usageLogExportRow(lg *model.Log, loc *time.Location) []interface{} {
 		outputPrice,
 		usageLogQuotaUSD(int64(lg.Quota)),
 	}
+}
+
+func usageLogDetailedExportRow(lg *model.Log, loc *time.Location) []interface{} {
+	billing := usageLogExportRow(lg, loc)
+	row := []interface{}{
+		lg.Id,
+		billing[0],
+		usageLogExportTypeName(lg.Type),
+		lg.UserId,
+		lg.Username,
+		billing[2],
+		lg.Group,
+		billing[1],
+	}
+	row = append(row, billing[3:]...)
+	row = append(row,
+		lg.Quota,
+		lg.UseTime,
+		lg.IsStream,
+		lg.ChannelId,
+		lg.ChannelName,
+		lg.Ip,
+		lg.RequestId,
+		lg.UpstreamRequestId,
+		truncateExcelCell(lg.Content),
+		truncateExcelCell(lg.Other),
+	)
+	return row
+}
+
+func usageLogExportTypeName(logType int) string {
+	switch logType {
+	case model.LogTypeTopup:
+		return "topup"
+	case model.LogTypeConsume:
+		return "consume"
+	case model.LogTypeManage:
+		return "manage"
+	case model.LogTypeSystem:
+		return "system"
+	case model.LogTypeError:
+		return "error"
+	case model.LogTypeRefund:
+		return "refund"
+	case model.LogTypeLogin:
+		return "login"
+	default:
+		return "unknown"
+	}
+}
+
+// excelCellMaxChars is Excel's per-cell character limit. Longer content fails the workbook write.
+const excelCellMaxChars = 32767
+
+func truncateExcelCell(value string) string {
+	if len(value) <= excelCellMaxChars {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= excelCellMaxChars {
+		return value
+	}
+	return string(runes[:excelCellMaxChars])
 }
 
 func usageLogInfactPromptTokens(prompt int, other map[string]interface{}, readTokens, writeTokens, imageTokens int) int {

@@ -5,6 +5,8 @@ import { api } from '@/lib/api'
 import { exportDownloadProgressMessage } from '@/lib/export-download-progress'
 import type { GetLogsParams } from '../types'
 
+export type UsageLogExportDetail = 'simple' | 'full'
+
 async function parseBlobErrorMessage(blob: Blob): Promise<string> {
   const text = await blob.text()
   try {
@@ -43,10 +45,12 @@ function triggerBlobDownload(blob: Blob, contentDisposition: string) {
  */
 export async function downloadUsageLogsExport(
   params: Omit<GetLogsParams, 'p' | 'page_size'>,
-  isAdmin: boolean
+  isAdmin: boolean,
+  detail: UsageLogExportDetail = 'simple'
 ): Promise<void> {
   const path = isAdmin ? '/api/log/export' : '/api/log/self/export'
   const query: Record<string, string | number> = {}
+  if (isAdmin && detail === 'full') query.detail = 'full'
   if (params.type != null) query.type = params.type
   if (params.start_timestamp != null) query.start_timestamp = params.start_timestamp
   if (params.end_timestamp != null) query.end_timestamp = params.end_timestamp

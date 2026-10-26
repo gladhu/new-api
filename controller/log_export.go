@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 func parseLogExportFilter(c *gin.Context, userId int, forAdmin bool) model.LogListFilter {
@@ -66,9 +67,15 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 	}
 
 	loc := parseLogExportLocation(c)
-	logger.LogInfo(c, fmt.Sprintf("usage log export stage=workbook begin rows=%d", len(logs)))
+	detailed := filter.ForAdmin && filter.Detailed
+	logger.LogInfo(c, fmt.Sprintf("usage log export stage=workbook begin rows=%d detailed=%t", len(logs), detailed))
 	buildStarted := time.Now()
-	file, err := newUsageLogsWorkbook(logs, loc)
+	var file *excelize.File
+	if detailed {
+		file, err = newUsageLogsDetailedWorkbook(logs, loc)
+	} else {
+		file, err = newUsageLogsWorkbook(logs, loc)
+	}
 	logUsageExportStage(c, "workbook", len(logs), time.Since(buildStarted))
 	if err != nil {
 		finishUsageExport(c, len(logs), started)
@@ -83,7 +90,11 @@ func respondUsageLogsExport(c *gin.Context, filter model.LogListFilter) {
 		common.ApiError(c, err)
 		return
 	}
-	filename := "usage-logs-" + time.Now().In(loc).Format("20060102-150405") + ".xlsx"
+	filenamePrefix := "usage-logs-"
+	if detailed {
+		filenamePrefix = "usage-logs-detailed-"
+	}
+	filename := filenamePrefix + time.Now().In(loc).Format("20060102-150405") + ".xlsx"
 	adminUserExportSetDownloadHeaders(c, usageLogXLSXContentType, filename)
 	c.Header("Content-Length", strconv.Itoa(buf.Len()))
 	c.Status(http.StatusOK)
@@ -119,8 +130,10 @@ func logUsageExportStage(ctx context.Context, stage string, rows int, elapsed ti
 }
 
 // ExportAllLogs exports filtered usage logs as Excel (admin).
+// detail=full writes the detailed workbook; any other value stays on the slim billing sheet.
 func ExportAllLogs(c *gin.Context) {
 	filter := parseLogExportFilter(c, 0, true)
+	filter.Detailed = strings.EqualFold(strings.TrimSpace(c.Query("detail")), "full")
 	respondUsageLogsExport(c, filter)
 }
 

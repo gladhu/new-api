@@ -20,7 +20,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import type { Table } from '@tanstack/react-table'
-import { Download, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
@@ -38,10 +38,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
-import { downloadUsageLogsExport } from '../api'
+import {
+  downloadUsageLogsExport,
+  type UsageLogExportDetail,
+} from '../api'
 import { buildSearchParams } from '../lib/filter'
-import { buildApiParams } from '../lib/utils'
-import { getDefaultTimeRange } from '../lib/utils'
+import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -50,6 +52,7 @@ import {
   LogsFilterInput,
   LogsFilterToolbar,
 } from './logs-filter-toolbar'
+import { UsageLogExportButton } from './usage-log-export-button'
 import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -229,28 +232,31 @@ export function CommonLogsFilterBar<TData>(
   }, [navigate, queryClient])
 
 
-  const handleExport = useCallback(async () => {
-    setExporting(true)
-    try {
-      const filterParams = buildSearchParams(filters, 'common')
-      const apiParams = buildApiParams({
-        page: 1,
-        pageSize: 1,
-        searchParams: {
-          ...filterParams,
-          type: [logType],
-        },
-        columnFilters: [],
-        isAdmin,
-      })
-      const { p: _p, page_size: _ps, ...exportParams } = apiParams
-      await downloadUsageLogsExport(exportParams, isAdmin)
-    } catch {
-      // downloadUsageLogsExport already shows the error toast
-    } finally {
-      setExporting(false)
-    }
-  }, [filters, isAdmin, logType])
+  const handleExport = useCallback(
+    async (detail: UsageLogExportDetail) => {
+      setExporting(true)
+      try {
+        const filterParams = buildSearchParams(filters, 'common')
+        const apiParams = buildApiParams({
+          page: 1,
+          pageSize: 1,
+          searchParams: {
+            ...filterParams,
+            type: [logType],
+          },
+          columnFilters: [],
+          isAdmin,
+        })
+        const { p: _p, page_size: _ps, ...exportParams } = apiParams
+        await downloadUsageLogsExport(exportParams, isAdmin, detail)
+      } catch {
+        // downloadUsageLogsExport already shows the error toast
+      } finally {
+        setExporting(false)
+      }
+    },
+    [filters, isAdmin, logType]
+  )
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -470,19 +476,12 @@ export function CommonLogsFilterBar<TData>(
       onSearch={handleApply}
       searchLoading={fetchingLogs > 0}
       trailingActions={
-        <Button
-          type='button'
-          variant='outline'
-          onClick={handleExport}
-          disabled={exporting || fetchingLogs > 0}
-        >
-          {exporting ? (
-            <Loader2 className='animate-spin' />
-          ) : (
-            <Download className='size-3.5' />
-          )}
-          {t('Export logs')}
-        </Button>
+        <UsageLogExportButton
+          isAdmin={isAdmin}
+          disabled={fetchingLogs > 0}
+          exporting={exporting}
+          onExport={handleExport}
+        />
       }
       onReset={handleReset}
     />
