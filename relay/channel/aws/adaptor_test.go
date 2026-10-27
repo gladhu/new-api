@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -369,6 +369,156 @@ func TestConvertOpenAIResponsesRequest_BedrockGPT6DropsExplicitZeroTemperature(t
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "temperature")
 	assert.NotContains(t, string(body), "top_p")
+}
+
+func TestConvertOpenAIResponsesRequest_BedrockGPT6NormalizesReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		model        string
+		upstream     string
+		effort       string
+		hasReasoning bool
+		wantModel    string
+		wantEffort   string
+		wantRecorded string
+	}{
+		{
+			name:         "none becomes high",
+			model:        "gpt-6.1-sol",
+			upstream:     "gpt-6.1-sol",
+			effort:       "none",
+			hasReasoning: true,
+			wantModel:    "openai.gpt-6.1-sol",
+			wantEffort:   "high",
+			wantRecorded: "high",
+		},
+		{
+			name:         "minimal becomes high",
+			model:        "gpt-6.1-sol",
+			upstream:     "gpt-6.1-sol",
+			effort:       "minimal",
+			hasReasoning: true,
+			wantModel:    "openai.gpt-6.1-sol",
+			wantEffort:   "high",
+			wantRecorded: "high",
+		},
+		{
+			name:         "ultra becomes high",
+			model:        "gpt-6.1-sol",
+			upstream:     "gpt-6.1-sol",
+			effort:       "ultra",
+			hasReasoning: true,
+			wantModel:    "openai.gpt-6.1-sol",
+			wantEffort:   "high",
+			wantRecorded: "high",
+		},
+		{
+			name:         "xhigh is kept",
+			model:        "gpt-6.1-sol",
+			upstream:     "gpt-6.1-sol",
+			effort:       "xhigh",
+			hasReasoning: true,
+			wantModel:    "openai.gpt-6.1-sol",
+			wantEffort:   "xhigh",
+			wantRecorded: "xhigh",
+		},
+		{
+			name:         "suffix none becomes high",
+			model:        "gpt-6.1-sol-none",
+			upstream:     "gpt-6.1-sol-none",
+			wantModel:    "openai.gpt-6.1-sol",
+			wantEffort:   "high",
+			wantRecorded: "high",
+		},
+		{
+			name:         "cris profile minimal becomes high",
+			model:        "gpt-6.1-sol",
+			upstream:     "global.openai.gpt-6.1-sol",
+			effort:       "minimal",
+			hasReasoning: true,
+			wantModel:    "global.openai.gpt-6.1-sol",
+			wantEffort:   "high",
+			wantRecorded: "high",
+		},
+		{
+			name:       "omitted effort stays omitted",
+			model:      "gpt-6.1-sol",
+			upstream:   "gpt-6.1-sol",
+			wantModel:  "openai.gpt-6.1-sol",
+			wantEffort: "",
+		},
+		{
+			name:         "gpt-5 keeps none",
+			model:        "gpt-5.6-luna",
+			upstream:     "gpt-5.6-luna",
+			effort:       "none",
+			hasReasoning: true,
+			wantModel:    "openai.gpt-5.6-luna",
+			wantEffort:   "none",
+			wantRecorded: "none",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			adaptor := &Adaptor{}
+			info := &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: tt.upstream},
+			}
+			req := dto.OpenAIResponsesRequest{
+				Model: tt.model,
+				Input: json.RawMessage(`"hello"`),
+			}
+			if tt.hasReasoning {
+				req.Reasoning = &dto.Reasoning{Effort: tt.effort}
+			}
+
+			converted, err := adaptor.ConvertOpenAIResponsesRequest(nil, info, req)
+			require.NoError(t, err)
+			got, ok := converted.(dto.OpenAIResponsesRequest)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantModel, got.Model)
+			assert.Equal(t, tt.wantRecorded, info.ReasoningEffort)
+			if tt.wantEffort == "" {
+				if got.Reasoning != nil {
+					assert.Empty(t, got.Reasoning.Effort)
+				}
+				return
+			}
+			require.NotNil(t, got.Reasoning)
+			assert.Equal(t, tt.wantEffort, got.Reasoning.Effort)
+		})
+	}
+}
+
+func TestConvertOpenAIRequest_BedrockGPT6ChatNormalizesReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeChatCompletions,
+		OriginModelName: "gpt-6.1-sol",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gpt-6.1-sol",
+		},
+	}
+	converted, err := adaptor.ConvertOpenAIRequest(nil, info, &dto.GeneralOpenAIRequest{
+		Model:           "gpt-6.1-sol",
+		ReasoningEffort: "none",
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+	})
+	require.NoError(t, err)
+	got, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	require.NotNil(t, got.Reasoning)
+	assert.Equal(t, "high", got.Reasoning.Effort)
+	assert.Equal(t, "high", info.ReasoningEffort)
 }
 
 func TestConvertOpenAIRequest_BedrockOpenAIChatCompletionsToResponses(t *testing.T) {

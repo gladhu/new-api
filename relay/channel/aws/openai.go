@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/pkg/errors"
 )
@@ -68,6 +69,18 @@ func convertBedrockOpenAIResponsesRequest(infoModel string, request dto.OpenAIRe
 			request.Reasoning.Effort = effort
 		}
 		request.Model = originModel
+	}
+	// Suffix parsing overwrites reasoning.effort, so normalize after it.
+	// GPT-6 on these channels rejects none, minimal, and ultra. Azure already
+	// maps anything outside low/medium/high/xhigh/max to high. Leave GPT-5.4+
+	// alone: none and minimal can still be valid there. Empty stays empty.
+	if common.IsOpenAIGPT6PlusModel(request.Model) || common.IsOpenAIGPT6PlusModel(infoModel) {
+		if request.Reasoning != nil {
+			request.Reasoning.Effort = service.NormalizeAzureGPT6ReasoningEffort(request.Reasoning.Effort)
+		}
+		if effort != "" {
+			effort = service.NormalizeAzureGPT6ReasoningEffort(effort)
+		}
 	}
 
 	// Channel model mapping may already point at a CRIS ID such as
