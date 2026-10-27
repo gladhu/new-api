@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -64,6 +65,25 @@ func TestIsEncryptedReasoningError(t *testing.T) {
 			want: true,
 		},
 		{
+			name:       "bedrock bare invalid encrypted content without code",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "invalid encrypted content",
+				Type:    "invalid_request_error",
+			}, http.StatusBadRequest),
+			want: true,
+		},
+		{
+			name:       "bedrock message field invalid encrypted content",
+			statusCode: http.StatusBadRequest,
+			err: types.NewOpenAIError(
+				fmt.Errorf("invalid encrypted content"),
+				types.ErrorCodeBadResponseStatusCode,
+				http.StatusBadRequest,
+			),
+			want: true,
+		},
+		{
 			name:       "unrelated 400 error",
 			statusCode: http.StatusBadRequest,
 			err: types.WithOpenAIError(types.OpenAIError{
@@ -115,6 +135,40 @@ func TestStripEncryptedReasoningFromResponsesBody(t *testing.T) {
 	// Calling a second time on already stripped body returns false.
 	_, strippedAgain := stripEncryptedReasoningFromResponsesBody(strippedBody)
 	assert.False(t, strippedAgain)
+}
+
+func TestStripEncryptedReasoningRemovesNestedAndCompactionCiphertext(t *testing.T) {
+	rawBody := []byte(`{
+		"model": "gpt-5.6-sol",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]},
+			{"type": "compaction", "id": "cmp_1", "encrypted_content": "gAAAAAB-compaction"},
+			{
+				"type": "message",
+				"role": "assistant",
+				"content": [
+					{"type": "output_text", "text": "answer", "encrypted_content": "gAAAAAB-part"},
+					{"type": "reasoning", "id": "rs_nested", "summary": [], "encrypted_content": "gAAAAAB-nested"}
+				]
+			},
+			{"type": "function_call_output", "call_id": "call_1", "output": "ok", "encrypted_content": "gAAAAAB-output"}
+		]
+	}`)
+
+	strippedBody, stripped := stripEncryptedReasoningFromResponsesBody(rawBody)
+	require.True(t, stripped)
+
+	inputArr := gjson.GetBytes(strippedBody, "input").Array()
+	require.Len(t, inputArr, 3)
+	assert.Equal(t, "message", inputArr[0].Get("type").String())
+	assert.Equal(t, "message", inputArr[1].Get("type").String())
+	assert.Equal(t, "answer", inputArr[1].Get("content.0.text").String())
+	assert.False(t, inputArr[1].Get("content.0.encrypted_content").Exists())
+	assert.Equal(t, int64(1), inputArr[1].Get("content.#").Int())
+	assert.Equal(t, "function_call_output", inputArr[2].Get("type").String())
+	assert.Equal(t, "ok", inputArr[2].Get("output").String())
+	assert.False(t, inputArr[2].Get("encrypted_content").Exists())
+	assert.NotContains(t, string(strippedBody), "encrypted_content")
 }
 
 func TestResponsesHelperRetriesAfterStrippingEncryptedReasoning(t *testing.T) {

@@ -210,11 +210,14 @@ func isEncryptedReasoningError(statusCode int, err *types.NewAPIError) bool {
 		return false
 	}
 	code := strings.ToLower(strings.TrimSpace(string(err.GetErrorCode())))
-	if code == "invalid_encrypted_content" {
+	if code == "invalid_encrypted_content" || code == "invalid_encrypted_reasoning" {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "invalid encrypted reasoning") ||
+	// Bedrock often returns the bare message "invalid encrypted content"
+	// with no invalid_encrypted_content code (or only a validation_error code).
+	if strings.Contains(msg, "invalid encrypted content") ||
+		strings.Contains(msg, "invalid encrypted reasoning") ||
 		strings.Contains(msg, "encrypted reasoning") ||
 		strings.Contains(msg, "encrypted content could not be decrypted") ||
 		strings.Contains(msg, "encrypted content could not be verified") {
@@ -272,34 +275,7 @@ func stripEncryptedReasoningFromInput(raw json.RawMessage) (json.RawMessage, boo
 	if err := common.Unmarshal(raw, &items); err != nil {
 		return raw, false
 	}
-	kept := make([]any, 0, len(items))
-	changed := false
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			kept = append(kept, item)
-			continue
-		}
-		typ, _ := m["type"].(string)
-		if strings.EqualFold(strings.TrimSpace(typ), "reasoning") {
-			changed = true
-			continue
-		}
-		if _, hasEncrypted := m["encrypted_content"]; hasEncrypted {
-			changed = true
-			if hasResponsesItemPayload(m) {
-				cloned := make(map[string]any, len(m)-1)
-				for k, v := range m {
-					if k != "encrypted_content" {
-						cloned[k] = v
-					}
-				}
-				kept = append(kept, cloned)
-			}
-			continue
-		}
-		kept = append(kept, item)
-	}
+	kept, changed := filterEncryptedInputItems(items)
 	if !changed || len(kept) == 0 {
 		return raw, false
 	}
@@ -310,8 +286,120 @@ func stripEncryptedReasoningFromInput(raw json.RawMessage) (json.RawMessage, boo
 	return cleaned, true
 }
 
+func filterEncryptedInputItems(items []any) ([]any, bool) {
+	kept := make([]any, 0, len(items))
+	changed := false
+	for _, item := range items {
+		cleaned, itemChanged, drop := sanitizeEncryptedInputItem(item)
+		if itemChanged {
+			changed = true
+		}
+		if drop {
+			continue
+		}
+		kept = append(kept, cleaned)
+	}
+	return kept, changed
+}
+
+func sanitizeEncryptedInputItem(item any) (any, bool, bool) {
+	m, ok := item.(map[string]any)
+	if !ok {
+		cleaned, childChanged := stripEncryptedValue(item)
+		if cleaned == nil {
+			return nil, true, true
+		}
+		return cleaned, childChanged, false
+	}
+	typ, _ := m["type"].(string)
+	if isReasoningItemType(typ) {
+		return nil, true, true
+	}
+	_, hadEncrypted := m["encrypted_content"]
+	cleaned, childChanged := stripEncryptedMap(m)
+	// Compaction checkpoints are the ciphertext itself. Leaving the shell
+	// makes Bedrock reject the retry with the same invalid encrypted content.
+	if isCompactionItemType(typ) && (hadEncrypted || isOpaqueEncryptedShell(cleaned)) {
+		return nil, true, true
+	}
+	if hadEncrypted && isOpaqueEncryptedShell(cleaned) {
+		return nil, true, true
+	}
+	return cleaned, hadEncrypted || childChanged, false
+}
+
+func stripEncryptedValue(v any) (any, bool) {
+	switch val := v.(type) {
+	case map[string]any:
+		typ, _ := val["type"].(string)
+		if isReasoningItemType(typ) {
+			return nil, true
+		}
+		cleaned, changed := stripEncryptedMap(val)
+		if isCompactionItemType(typ) && isOpaqueEncryptedShell(cleaned) {
+			return nil, true
+		}
+		return cleaned, changed
+	case []any:
+		filtered, changed := filterEncryptedInputItems(val)
+		if !changed {
+			return val, false
+		}
+		return filtered, true
+	default:
+		return v, false
+	}
+}
+
+func stripEncryptedMap(m map[string]any) (map[string]any, bool) {
+	changed := false
+	if _, ok := m["encrypted_content"]; ok {
+		delete(m, "encrypted_content")
+		changed = true
+	}
+	for k, v := range m {
+		cleaned, childChanged := stripEncryptedValue(v)
+		if !childChanged {
+			continue
+		}
+		changed = true
+		if cleaned == nil {
+			delete(m, k)
+			continue
+		}
+		m[k] = cleaned
+	}
+	return m, changed
+}
+
+func isReasoningItemType(typ string) bool {
+	return strings.EqualFold(strings.TrimSpace(typ), "reasoning")
+}
+
+func isCompactionItemType(typ string) bool {
+	return strings.EqualFold(strings.TrimSpace(typ), "compaction")
+}
+
+// isOpaqueEncryptedShell reports an item that has no readable conversation
+// payload left after encrypted reasoning fields are removed.
+func isOpaqueEncryptedShell(item map[string]any) bool {
+	if hasResponsesItemPayload(item) {
+		return false
+	}
+	for k, v := range item {
+		switch k {
+		case "id", "type", "status", "encrypted_content":
+			continue
+		}
+		if v != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func hasResponsesItemPayload(item map[string]any) bool {
-	for _, key := range []string{"role", "content", "call_id", "output", "arguments", "input"} {
+	for _, key := range []string{"role", "content", "call_id", "output", "arguments", "input", "name", "summary", "text"} {
 		if _, ok := item[key]; ok {
 			return true
 		}
