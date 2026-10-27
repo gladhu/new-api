@@ -46,6 +46,15 @@ func convertBedrockOpenAIResponsesRequest(infoModel string, request dto.OpenAIRe
 		return request, "", errors.New("not a Bedrock OpenAI model")
 	}
 
+	// Mantle rejects chat sampling params on these models. gpt-6.1-sol answers
+	// with "Unsupported parameter: 'temperature' is not supported with this model."
+	// top_p and the penalty fields are the same class already dropped for GPT-6
+	// on Azure. Explicit zeros must be omitted too, so clear the pointers.
+	request.Temperature = nil
+	request.TopP = nil
+	request.FrequencyPenalty = nil
+	request.PresencePenalty = nil
+
 	// Codex CLI forces Responses Lite for gpt-5.6-*; Bedrock Mantle expects classic Responses.
 	if err := normalizeCodexResponsesLiteForBedrock(&request); err != nil {
 		return request, "", err

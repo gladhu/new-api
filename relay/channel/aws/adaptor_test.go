@@ -298,6 +298,79 @@ func TestGetRequestURL_ClaudeApiKeyModeUsesCorrectRegionOrder(t *testing.T) {
 	assert.Equal(t, "https://bedrock-runtime.ap-northeast-1.amazonaws.com/model/anthropic.claude-sonnet-4-6/converse", url)
 }
 
+func TestConvertOpenAIRequest_BedrockGPT6DropsUnsupportedSamplingParams(t *testing.T) {
+	t.Parallel()
+
+	temperature := 0.0
+	topP := 1.0
+	frequencyPenalty := 0.5
+	presencePenalty := 0.2
+
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeChatCompletions,
+		OriginModelName: "gpt-6.1-sol",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gpt-6.1-sol",
+		},
+	}
+	converted, err := adaptor.ConvertOpenAIRequest(nil, info, &dto.GeneralOpenAIRequest{
+		Model:            "gpt-6.1-sol",
+		Temperature:      &temperature,
+		TopP:             &topP,
+		FrequencyPenalty: &frequencyPenalty,
+		PresencePenalty:  &presencePenalty,
+		Messages: []dto.Message{
+			{Role: "user", Content: "hello"},
+		},
+	})
+	require.NoError(t, err)
+	responsesReq, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Equal(t, "openai.gpt-6.1-sol", responsesReq.Model)
+	assert.Nil(t, responsesReq.Temperature)
+	assert.Nil(t, responsesReq.TopP)
+	assert.Nil(t, responsesReq.FrequencyPenalty)
+	assert.Nil(t, responsesReq.PresencePenalty)
+
+	body, err := json.Marshal(responsesReq)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "temperature")
+	assert.NotContains(t, string(body), "top_p")
+	assert.NotContains(t, string(body), "frequency_penalty")
+	assert.NotContains(t, string(body), "presence_penalty")
+}
+
+func TestConvertOpenAIResponsesRequest_BedrockGPT6DropsExplicitZeroTemperature(t *testing.T) {
+	t.Parallel()
+
+	temperature := 0.0
+	topP := 0.9
+	adaptor := &Adaptor{}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "global.openai.gpt-6.1-sol",
+		},
+	}
+	converted, err := adaptor.ConvertOpenAIResponsesRequest(nil, info, dto.OpenAIResponsesRequest{
+		Model:       "gpt-6.1-sol",
+		Input:       json.RawMessage(`"hello"`),
+		Temperature: &temperature,
+		TopP:        &topP,
+	})
+	require.NoError(t, err)
+	responsesReq, ok := converted.(dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	assert.Equal(t, "global.openai.gpt-6.1-sol", responsesReq.Model)
+	assert.Nil(t, responsesReq.Temperature)
+	assert.Nil(t, responsesReq.TopP)
+
+	body, err := json.Marshal(responsesReq)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "temperature")
+	assert.NotContains(t, string(body), "top_p")
+}
+
 func TestConvertOpenAIRequest_BedrockOpenAIChatCompletionsToResponses(t *testing.T) {
 	t.Parallel()
 
