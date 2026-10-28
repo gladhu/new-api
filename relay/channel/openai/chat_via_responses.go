@@ -2,6 +2,8 @@ package openai
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -205,9 +207,36 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
 	streamErr := (*types.NewAPIError)(nil)
+	// clientGone 表示调用方已取消请求。这种写失败要按已解析用量结算，
+	// 不能当成渠道 500，否则会重试并退回预扣费。
+	clientGone := false
 
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo == nil {
 		info.ClaudeConvertInfo = &relaycommon.ClaudeConvertInfo{LastMessagesType: relaycommon.LastMessageTypeNone}
+	}
+
+	markClientGone := func(err error) {
+		clientGone = true
+		if info.StreamStatus != nil {
+			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)
+		}
+	}
+	requestClientCanceled := func() bool {
+		return c != nil && c.Request != nil && errors.Is(c.Request.Context().Err(), context.Canceled)
+	}
+
+	// 客户端取消时继续解析已经到达的事件，便于拿到 usage；不再往下游写。
+	// 网关超时是 context.DeadlineExceeded，仍然按写失败返回。
+	noteSendErr := func(err error) bool {
+		if err == nil {
+			return true
+		}
+		if errors.Is(err, context.Canceled) {
+			markClientGone(err)
+			return true
+		}
+		streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+		return false
 	}
 
 	sendGeminiResponse := func(geminiResponse *dto.GeminiChatResponse) bool {
@@ -219,46 +248,38 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
+		if clientGone || requestClientCanceled() {
+			return true
+		}
 		c.Render(-1, common.CustomEvent{Data: "data: " + string(geminiResponseStr)})
-		_ = helper.FlushWriter(c)
+		if err := helper.FlushWriter(c); err != nil {
+			return noteSendErr(err)
+		}
 		return true
 	}
 
 	sendStreamResult := func(result relayconvert.ResponseResult) bool {
+		if clientGone {
+			return true
+		}
 		switch value := result.Value.(type) {
 		case dto.ChatCompletionsStreamResponse:
 			if len(value.Choices) == 0 && value.Usage == nil {
 				return true
 			}
-			if err := helper.ObjectData(c, &value); err != nil {
-				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-				return false
-			}
-			return true
+			return noteSendErr(helper.ObjectData(c, &value))
 		case *dto.ChatCompletionsStreamResponse:
 			if value == nil || (len(value.Choices) == 0 && value.Usage == nil) {
 				return true
 			}
-			if err := helper.ObjectData(c, value); err != nil {
-				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-				return false
-			}
-			return true
+			return noteSendErr(helper.ObjectData(c, value))
 		case dto.ClaudeResponse:
-			if err := helper.ClaudeData(c, value); err != nil {
-				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-				return false
-			}
-			return true
+			return noteSendErr(helper.ClaudeData(c, value))
 		case *dto.ClaudeResponse:
 			if value == nil {
 				return true
 			}
-			if err := helper.ClaudeData(c, *value); err != nil {
-				streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-				return false
-			}
-			return true
+			return noteSendErr(helper.ClaudeData(c, *value))
 		case dto.GeminiChatResponse:
 			return sendGeminiResponse(&value)
 		case *dto.GeminiChatResponse:
@@ -283,6 +304,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		}
 
 		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" {
+			if clientGone {
+				return
+			}
 			if oaiErr := streamResp.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
 				streamErr = types.WithOpenAIError(*oaiErr, responsesStreamErrorStatusCode(oaiErr))
 				sr.Stop(streamErr)
@@ -295,6 +319,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &streamResp)
 		if err != nil {
+			if clientGone {
+				return
+			}
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 			sr.Stop(streamErr)
 			return
@@ -320,17 +347,34 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {
 		info.ClaudeConvertInfo.Usage = usage
 	}
+	// 调用方已经离开时，跳过收尾 SSE。返回已解析用量让上层结算，而不是退回全部预扣。
+	if clientGone || requestClientCanceled() {
+		if !clientGone {
+			markClientGone(c.Request.Context().Err())
+		}
+		return usage, nil
+	}
 	finalResults, err := relayconvert.FinalizeStreamResponse(c, info, state)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
 	for _, result := range finalResults {
 		if !sendStreamResult(result) {
+			if clientGone {
+				return usage, nil
+			}
 			return nil, streamErr
 		}
 	}
+	if clientGone || requestClientCanceled() {
+		return usage, nil
+	}
 	if info.RelayFormat == types.RelayFormatOpenAI && info.ShouldIncludeUsage && usage != nil {
 		if err := helper.ObjectData(c, helper.GenerateFinalUsageResponse(responseId, createAt, info.UpstreamModelName, *usage)); err != nil {
+			if errors.Is(err, context.Canceled) {
+				markClientGone(err)
+				return usage, nil
+			}
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
 		}
 	}
