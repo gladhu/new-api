@@ -266,3 +266,186 @@ func TestResponsesHelperRetriesAfterStrippingEncryptedReasoning(t *testing.T) {
 	require.NoError(t, common.Unmarshal(req.Input, &updatedInput))
 	require.Len(t, updatedInput, 2)
 }
+
+func TestIsUnsupportedSearchContentTypesError(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		err        *types.NewAPIError
+		want       bool
+	}{
+		{
+			name:       "web search tools search_content_types not supported",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "The 'search_content_types' field is not supported for web search tools.",
+				Type:    "invalid_request_error",
+			}, http.StatusBadRequest),
+			want: true,
+		},
+		{
+			name:       "unknown parameter search_content_types",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "Unknown parameter: 'tools[0].search_content_types'.",
+				Type:    "invalid_request_error",
+			}, http.StatusBadRequest),
+			want: true,
+		},
+		{
+			name:       "extra inputs not permitted for search_content_types",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "tools.0.search_content_types: Extra inputs are not permitted",
+				Type:    "invalid_request_error",
+			}, http.StatusBadRequest),
+			want: true,
+		},
+		{
+			name:       "unrelated 400 error",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "Invalid parameter: 'temperature' is not supported with this model.",
+				Type:    "invalid_request_error",
+			}, http.StatusBadRequest),
+			want: false,
+		},
+		{
+			name:       "non-400 status code",
+			statusCode: http.StatusInternalServerError,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "The 'search_content_types' field is not supported for web search tools.",
+			}, http.StatusInternalServerError),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isUnsupportedSearchContentTypesError(tt.statusCode, tt.err))
+		})
+	}
+}
+
+func TestStripSearchContentTypesFromResponsesBody(t *testing.T) {
+	rawBody := []byte(`{
+		"model": "gpt-6.1-sol",
+		"input": [
+			{
+				"type": "additional_tools",
+				"role": "developer",
+				"tools": [
+					{"type": "web_search", "external_web_access": true, "search_content_types": ["text", "image"]}
+				]
+			},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
+		],
+		"tools": [
+			{"type": "web_search", "external_web_access": true, "search_content_types": ["text", "image"]},
+			{"type": "function", "name": "exec", "parameters": {}}
+		]
+	}`)
+
+	strippedBody, stripped := stripSearchContentTypesFromResponsesBody(rawBody)
+	require.True(t, stripped)
+	assert.Equal(t, "web_search", gjson.GetBytes(strippedBody, "tools.0.type").String())
+	assert.True(t, gjson.GetBytes(strippedBody, "tools.0.external_web_access").Bool())
+	assert.False(t, gjson.GetBytes(strippedBody, "tools.0.search_content_types").Exists())
+	assert.Equal(t, "exec", gjson.GetBytes(strippedBody, "tools.1.name").String())
+	assert.False(t, gjson.GetBytes(strippedBody, "input.0.tools.0.search_content_types").Exists())
+
+	_, strippedAgain := stripSearchContentTypesFromResponsesBody(strippedBody)
+	assert.False(t, strippedAgain)
+}
+
+func TestResponsesHelperRetriesAfterStrippingSearchContentTypes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	prevLogConsume := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() {
+		common.LogConsumeEnabled = prevLogConsume
+	})
+
+	var requestCount int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		attempt := atomic.AddInt32(&requestCount, 1)
+		if attempt == 1 {
+			require.True(t, gjson.GetBytes(bodyBytes, "tools.0.search_content_types").Exists())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"The 'search_content_types' field is not supported for web search tools.","type":"invalid_request_error"}}`))
+			return
+		}
+
+		assert.Equal(t, "web_search", gjson.GetBytes(bodyBytes, "tools.0.type").String())
+		assert.True(t, gjson.GetBytes(bodyBytes, "tools.0.external_web_access").Bool())
+		assert.False(t, gjson.GetBytes(bodyBytes, "tools.0.search_content_types").Exists())
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"id": "resp_ok",
+			"object": "response",
+			"status": "completed",
+			"model": "gpt-6.1-sol",
+			"output": [
+				{
+					"type": "message",
+					"id": "msg_1",
+					"status": "completed",
+					"role": "assistant",
+					"content": [{"type": "output_text", "text": "done"}]
+				}
+			],
+			"usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+		}`))
+	}))
+	defer upstream.Close()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Request.Header.Set("Content-Type", "application/json")
+	common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, upstream.URL)
+	common.SetContextKey(c, constant.ContextKeyOriginalModel, "gpt-6.1-sol")
+
+	req := &dto.OpenAIResponsesRequest{
+		Model: "gpt-6.1-sol",
+		Input: json.RawMessage(`[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]`),
+		Tools: json.RawMessage(`[{"type":"web_search","external_web_access":true,"search_content_types":["text","image"]}]`),
+	}
+
+	info := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeResponses,
+		RelayFormat:     types.RelayFormatOpenAIResponses,
+		OriginModelName: "gpt-6.1-sol",
+		RequestURLPath:  "/v1/responses",
+		Request:         req,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType:       constant.ChannelTypeOpenAI,
+			ChannelId:         1,
+			ChannelBaseUrl:    upstream.URL,
+			UpstreamModelName: "gpt-6.1-sol",
+			ApiType:           constant.APITypeOpenAI,
+		},
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{},
+		},
+	}
+	info.PriceData.UsePrice = true
+
+	apiErr := ResponsesHelper(c, info)
+	require.Nil(t, apiErr)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&requestCount))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "resp_ok", gjson.GetBytes(recorder.Body.Bytes(), "id").String())
+
+	var updatedTools []map[string]any
+	require.NoError(t, common.Unmarshal(req.Tools, &updatedTools))
+	require.Len(t, updatedTools, 1)
+	assert.NotContains(t, updatedTools[0], "search_content_types")
+}

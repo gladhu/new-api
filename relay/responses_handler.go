@@ -139,29 +139,51 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-			if isEncryptedReasoningError(httpResp.StatusCode, newAPIError) && outboundStorage != nil {
-				if rawBody, readErr := outboundStorage.Bytes(); readErr == nil {
-					if strippedBody, stripped := stripEncryptedReasoningFromResponsesBody(rawBody); stripped {
-						stripEncryptedReasoningFromRelayRequest(info.Request)
-						retryBody, retryCloser, bodyErr := relaycommon.NewOutboundJSONBody(strippedBody)
-						if bodyErr == nil {
-							defer retryCloser.Close()
-							logger.LogInfo(c, fmt.Sprintf("channel #%d rejected encrypted reasoning content, retrying after stripping encrypted reasoning from input", info.ChannelId))
-							retryResp, retryErr := adaptor.DoRequest(c, info, retryBody)
-							if retryErr != nil {
-								return types.NewOpenAIError(retryErr, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
-							}
-							if retryResp != nil {
-								httpResp = retryResp.(*http.Response)
-								if httpResp.StatusCode != http.StatusOK {
-									newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-									service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-									return newAPIError
-								}
-								newAPIError = nil
-							}
+			if outboundStorage != nil {
+				rawBody, readErr := outboundStorage.Bytes()
+				for readErr == nil && httpResp != nil && httpResp.StatusCode != http.StatusOK && newAPIError != nil {
+					var (
+						strippedBody []byte
+						stripped     bool
+						retryReason  string
+					)
+					switch {
+					case isEncryptedReasoningError(httpResp.StatusCode, newAPIError):
+						strippedBody, stripped = stripEncryptedReasoningFromResponsesBody(rawBody)
+						if stripped {
+							stripEncryptedReasoningFromRelayRequest(info.Request)
+							retryReason = "rejected encrypted reasoning content, retrying after stripping encrypted reasoning from input"
+						}
+					case isUnsupportedSearchContentTypesError(httpResp.StatusCode, newAPIError):
+						strippedBody, stripped = stripSearchContentTypesFromResponsesBody(rawBody)
+						if stripped {
+							stripSearchContentTypesFromRelayRequest(info.Request)
+							retryReason = "rejected search_content_types in web search tool, retrying after stripping search_content_types"
 						}
 					}
+					if !stripped {
+						break
+					}
+					rawBody = strippedBody
+					retryBody, retryCloser, bodyErr := relaycommon.NewOutboundJSONBody(rawBody)
+					if bodyErr != nil {
+						break
+					}
+					defer retryCloser.Close()
+					logger.LogInfo(c, fmt.Sprintf("channel #%d %s", info.ChannelId, retryReason))
+					retryResp, retryErr := adaptor.DoRequest(c, info, retryBody)
+					if retryErr != nil {
+						return types.NewOpenAIError(retryErr, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+					}
+					if retryResp == nil {
+						break
+					}
+					httpResp = retryResp.(*http.Response)
+					if httpResp.StatusCode == http.StatusOK {
+						newAPIError = nil
+						break
+					}
+					newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 				}
 			}
 			if newAPIError != nil {
@@ -405,4 +427,139 @@ func hasResponsesItemPayload(item map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func isUnsupportedSearchContentTypesError(statusCode int, err *types.NewAPIError) bool {
+	if statusCode != http.StatusBadRequest || err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "search_content_types") {
+		return false
+	}
+	return strings.Contains(msg, "not supported") ||
+		strings.Contains(msg, "unsupported") ||
+		strings.Contains(msg, "unknown") ||
+		strings.Contains(msg, "unrecognized") ||
+		strings.Contains(msg, "not permitted") ||
+		strings.Contains(msg, "not allowed")
+}
+
+func stripSearchContentTypesFromRelayRequest(request any) {
+	switch req := request.(type) {
+	case *dto.OpenAIResponsesRequest:
+		if cleaned, ok := stripSearchContentTypesFromTools(req.Tools); ok {
+			req.Tools = cleaned
+		}
+		if cleaned, ok := stripSearchContentTypesFromInputTools(req.Input); ok {
+			req.Input = cleaned
+		}
+	case *dto.OpenAIResponsesCompactionRequest:
+		if cleaned, ok := stripSearchContentTypesFromTools(req.Tools); ok {
+			req.Tools = cleaned
+		}
+		if cleaned, ok := stripSearchContentTypesFromInputTools(req.Input); ok {
+			req.Input = cleaned
+		}
+	}
+}
+
+func stripSearchContentTypesFromResponsesBody(body []byte) ([]byte, bool) {
+	if len(body) == 0 {
+		return nil, false
+	}
+	updatedBody := body
+	changed := false
+
+	toolsResult := gjson.GetBytes(updatedBody, "tools")
+	if toolsResult.Exists() && toolsResult.IsArray() {
+		if cleanedTools, ok := stripSearchContentTypesFromTools(json.RawMessage(toolsResult.Raw)); ok {
+			nextBody, err := sjson.SetRawBytes(updatedBody, "tools", cleanedTools)
+			if err == nil {
+				updatedBody = nextBody
+				changed = true
+			}
+		}
+	}
+
+	inputResult := gjson.GetBytes(updatedBody, "input")
+	if inputResult.Exists() && inputResult.IsArray() {
+		if cleanedInput, ok := stripSearchContentTypesFromInputTools(json.RawMessage(inputResult.Raw)); ok {
+			nextBody, err := sjson.SetRawBytes(updatedBody, "input", cleanedInput)
+			if err == nil {
+				updatedBody = nextBody
+				changed = true
+			}
+		}
+	}
+
+	if !changed {
+		return nil, false
+	}
+	return updatedBody, true
+}
+
+func stripSearchContentTypesFromTools(raw json.RawMessage) (json.RawMessage, bool) {
+	if len(raw) == 0 || common.GetJsonType(raw) != "array" {
+		return raw, false
+	}
+	var tools []any
+	if err := common.Unmarshal(raw, &tools); err != nil {
+		return raw, false
+	}
+	if !stripSearchContentTypesFromToolSlice(tools) {
+		return raw, false
+	}
+	cleaned, err := common.Marshal(tools)
+	if err != nil {
+		return raw, false
+	}
+	return cleaned, true
+}
+
+func stripSearchContentTypesFromInputTools(raw json.RawMessage) (json.RawMessage, bool) {
+	if len(raw) == 0 || common.GetJsonType(raw) != "array" {
+		return raw, false
+	}
+	var items []any
+	if err := common.Unmarshal(raw, &items); err != nil {
+		return raw, false
+	}
+	changed := false
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		tools, ok := m["tools"].([]any)
+		if !ok {
+			continue
+		}
+		if stripSearchContentTypesFromToolSlice(tools) {
+			changed = true
+		}
+	}
+	if !changed {
+		return raw, false
+	}
+	cleaned, err := common.Marshal(items)
+	if err != nil {
+		return raw, false
+	}
+	return cleaned, true
+}
+
+func stripSearchContentTypesFromToolSlice(tools []any) bool {
+	changed := false
+	for _, tool := range tools {
+		m, ok := tool.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, exists := m["search_content_types"]; exists {
+			delete(m, "search_content_types")
+			changed = true
+		}
+	}
+	return changed
 }
