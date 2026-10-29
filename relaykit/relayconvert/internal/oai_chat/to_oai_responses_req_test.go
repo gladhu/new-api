@@ -153,6 +153,36 @@ func TestChatCompletionsRequestToResponsesRequestMapsReasoningEffort(t *testing.
 	})
 }
 
+func TestChatCompletionsRequestToResponsesRequestRaisesMaxOutputTokensFloor(t *testing.T) {
+	tests := []struct {
+		name                string
+		maxTokens           *uint
+		maxCompletionTokens *uint
+		wantMaxOutputTokens *uint
+	}{
+		{name: "max_tokens 1 raised to 16", maxTokens: lo.ToPtr(uint(1)), wantMaxOutputTokens: lo.ToPtr(uint(16))},
+		{name: "max_completion_tokens 1 raised to 16", maxCompletionTokens: lo.ToPtr(uint(1)), wantMaxOutputTokens: lo.ToPtr(uint(16))},
+		{name: "15 raised to 16", maxTokens: lo.ToPtr(uint(15)), wantMaxOutputTokens: lo.ToPtr(uint(16))},
+		{name: "16 stays 16", maxTokens: lo.ToPtr(uint(16)), wantMaxOutputTokens: lo.ToPtr(uint(16))},
+		{name: "larger value stays", maxTokens: lo.ToPtr(uint(1)), maxCompletionTokens: lo.ToPtr(uint(32)), wantMaxOutputTokens: lo.ToPtr(uint(32))},
+		{name: "explicit zero stays zero", maxTokens: lo.ToPtr(uint(0)), wantMaxOutputTokens: lo.ToPtr(uint(0))},
+		{name: "unset stays nil"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
+				Model:               "gpt-test",
+				Messages:            []dto.Message{{Role: "user", Content: "hello"}},
+				MaxTokens:           tt.maxTokens,
+				MaxCompletionTokens: tt.maxCompletionTokens,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantMaxOutputTokens, got.MaxOutputTokens)
+		})
+	}
+}
+
 func TestChatCompletionsRequestToResponsesRequestRejectsMultipleChoices(t *testing.T) {
 	_, err := ChatCompletionsRequestToResponsesRequest(&dto.GeneralOpenAIRequest{
 		Model: "gpt-test",

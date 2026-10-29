@@ -379,10 +379,13 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 	if maxCompletionTokens > maxOutputTokens {
 		maxOutputTokens = maxCompletionTokens
 	}
-	// OpenAI Responses API rejects max_output_tokens < 16 when explicitly provided.
-	//if maxOutputTokens > 0 && maxOutputTokens < 16 {
-	//	maxOutputTokens = 16
-	//}
+	// Chat completions allow max_tokens=1. Responses rejects an explicit
+	// max_output_tokens below 16, so raise that floor instead of forwarding
+	// a value the upstream will reject. Omitting the field would fall through
+	// to the model default, which can be far larger.
+	if maxOutputTokens > 0 && maxOutputTokens < 16 {
+		maxOutputTokens = 16
+	}
 
 	var topP *float64
 	if req.TopP != nil {
