@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Calendar as CalendarIcon } from 'lucide-react'
+import { useState } from 'react'
 import { enUS, fr, ja, ru, vi, zhCN } from 'react-day-picker/locale'
 import { useTranslation } from 'react-i18next'
 
@@ -28,6 +29,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import dayjs from '@/lib/dayjs'
+import { cn } from '@/lib/utils'
 
 const calendarLocales = {
   en: enUS,
@@ -42,25 +44,42 @@ type DatePickerProps = {
   selected: Date | undefined
   onSelect: (date: Date | undefined) => void
   placeholder?: string
+  ariaLabel?: string
+  disabled?: (date: Date) => boolean
+  className?: string
+  defaultMonth?: Date
+  startMonth?: Date
+  endMonth?: Date
 }
 
 export function DatePicker({
   selected,
   onSelect,
   placeholder,
+  ariaLabel,
+  disabled,
+  className,
+  defaultMonth,
+  startMonth,
+  endMonth,
 }: DatePickerProps) {
   const { t, i18n } = useTranslation()
+  const [open, setOpen] = useState(false)
   const placeholderText = placeholder ?? t('Pick a date')
   const calendarLocale =
     calendarLocales[i18n.language as keyof typeof calendarLocales] ?? enUS
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
           <Button
             variant='outline'
+            aria-label={ariaLabel}
             data-empty={!selected}
-            className='data-[empty=true]:text-muted-foreground w-[240px] justify-start text-start font-normal'
+            className={cn(
+              'data-[empty=true]:text-muted-foreground justify-start text-start font-normal',
+              className ?? 'w-[240px]'
+            )}
           />
         }
       >
@@ -76,10 +95,17 @@ export function DatePicker({
           mode='single'
           captionLayout='dropdown'
           selected={selected}
-          onSelect={onSelect}
+          defaultMonth={defaultMonth ?? selected}
+          startMonth={startMonth}
+          endMonth={endMonth}
+          onSelect={(date) => {
+            onSelect(date)
+            if (date) setOpen(false)
+          }}
           locale={calendarLocale}
-          disabled={(date: Date) =>
-            date > new Date() || date < new Date('1900-01-01')
+          disabled={
+            disabled ??
+            ((date: Date) => date > new Date() || date < new Date('1900-01-01'))
           }
         />
       </PopoverContent>

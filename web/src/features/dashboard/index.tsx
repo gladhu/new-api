@@ -72,6 +72,12 @@ const LazyModelCharts = lazy(() =>
   }))
 )
 
+const LazyCumulativeConsumptionChart = lazy(() =>
+  import('./components/models/cumulative-consumption-chart').then((m) => ({
+    default: m.CumulativeConsumptionChart,
+  }))
+)
+
 const LazyConsumptionDistributionChart = lazy(() =>
   import('./components/models/consumption-distribution-chart').then((m) => ({
     default: m.ConsumptionDistributionChart,
@@ -346,6 +352,13 @@ export function Dashboard() {
                   <LazyLogStatCards
                     filters={modelFilters}
                     onDataUpdate={handleDataUpdate}
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.05}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyCumulativeConsumptionChart
+                    username={modelFilters.username}
                   />
                 </Suspense>
               </FadeIn>

@@ -33,6 +33,16 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface HourlyQuotaPoint {
+  created_at: number
+  quota: number
+}
+
+export interface CumulativeQuotaData {
+  models: string[]
+  points: HourlyQuotaPoint[]
+}
+
 export interface FlowQuotaDataItem {
   user_id?: number
   username?: string

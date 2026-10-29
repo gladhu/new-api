@@ -181,3 +181,71 @@ func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaDat
 	err = DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime).Group("model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
 }
+
+// HourlyQuotaPoint is one hour's summed quota. CreatedAt is the hour bucket
+// already stored on quota_data (unix seconds truncated to the hour).
+type HourlyQuotaPoint struct {
+	CreatedAt int64 `json:"created_at"`
+	Quota     int   `json:"quota"`
+}
+
+// CumulativeQuota is the hourly series for the consumption comparison chart,
+// plus the model names available in the same window.
+type CumulativeQuota struct {
+	Models []string           `json:"models"`
+	Points []HourlyQuotaPoint `json:"points"`
+}
+
+func cumulativeQuotaScope(startTime int64, endTime int64, userID int, username string) *gorm.DB {
+	tx := DB.Model(&QuotaData{}).
+		Where("created_at >= ? AND created_at <= ?", startTime, endTime)
+	if userID > 0 {
+		tx = tx.Where("user_id = ?", userID)
+	}
+	if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+	return tx
+}
+
+// GetCumulativeQuotaData returns hourly quota sums for the comparison chart.
+// modelName filters the points only; Models always lists every model in the window.
+func GetCumulativeQuotaData(startTime int64, endTime int64, userID int, username string, modelName string) (*CumulativeQuota, error) {
+	var modelRows []struct {
+		ModelName string `gorm:"column:model_name"`
+	}
+	err := cumulativeQuotaScope(startTime, endTime, userID, username).
+		Where("model_name <> ?", "").
+		Select("model_name").
+		Group("model_name").
+		Order("model_name asc").
+		Scan(&modelRows).Error
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(modelRows))
+	for _, row := range modelRows {
+		if row.ModelName == "" {
+			continue
+		}
+		models = append(models, row.ModelName)
+	}
+
+	pointsQuery := cumulativeQuotaScope(startTime, endTime, userID, username)
+	if modelName != "" {
+		pointsQuery = pointsQuery.Where("model_name = ?", modelName)
+	}
+	points := make([]HourlyQuotaPoint, 0)
+	err = pointsQuery.
+		Select("created_at, sum(quota) as quota").
+		Group("created_at").
+		Order("created_at asc").
+		Scan(&points).Error
+	if err != nil {
+		return nil, err
+	}
+	if points == nil {
+		points = []HourlyQuotaPoint{}
+	}
+	return &CumulativeQuota{Models: models, Points: points}, nil
+}

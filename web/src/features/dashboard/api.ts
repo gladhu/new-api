@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  CumulativeQuotaData,
   FlowQuotaDataItem,
   QuotaDataItem,
   UptimeGroupResult,
@@ -64,6 +65,32 @@ export async function getUserQuotaDataByUsers(params: {
     { params }
   )
   return res.data
+}
+
+export async function getCumulativeQuota(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    username?: string
+    model_name?: string
+  },
+  isAdmin = false
+) {
+  const endpoint = isAdmin
+    ? '/api/data/cumulative'
+    : '/api/data/cumulative/self'
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data?: CumulativeQuotaData
+  }>(endpoint, { params })
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.message || 'Failed to load cumulative consumption')
+  }
+  return {
+    models: res.data.data.models ?? [],
+    points: res.data.data.points ?? [],
+  }
 }
 
 export async function getFlowQuotaDates(

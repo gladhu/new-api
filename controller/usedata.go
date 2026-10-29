@@ -132,3 +132,41 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 	})
 	return
 }
+
+const maxCumulativeQuotaSpanSeconds int64 = 32 * 24 * 60 * 60
+
+func respondCumulativeQuota(c *gin.Context, userID int, username string) {
+	startTimestamp, endTimestamp, ok := parseFlowQuotaTimeRange(c)
+	if !ok {
+		return
+	}
+	if endTimestamp-startTimestamp > maxCumulativeQuotaSpanSeconds {
+		common.ApiErrorMsg(c, "时间跨度不能超过 1 个月")
+		return
+	}
+	data, err := model.GetCumulativeQuotaData(
+		startTimestamp,
+		endTimestamp,
+		userID,
+		username,
+		strings.TrimSpace(c.Query("model_name")),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, data)
+}
+
+func GetCumulativeQuota(c *gin.Context) {
+	respondCumulativeQuota(c, 0, strings.TrimSpace(c.Query("username")))
+}
+
+func GetUserCumulativeQuota(c *gin.Context) {
+	userID := c.GetInt("id")
+	if userID <= 0 {
+		common.ApiErrorMsg(c, "invalid user")
+		return
+	}
+	respondCumulativeQuota(c, userID, "")
+}
