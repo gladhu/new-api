@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestChannelConsumptionRouteUsesReadPermission(t *testing.T) {
+	assertChannelRoutePermission(t, http.MethodGet, "/:id/consumption", authz.ChannelRead, controller.GetChannelConsumption)
+}
+
 func TestChannelStatusRoutesUseOperatePermission(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodPost, "/:id/status", authz.ChannelOperate, controller.UpdateChannelStatus)
 	assertChannelRoutePermission(t, http.MethodPost, "/status/batch", authz.ChannelOperate, controller.BatchUpdateChannelStatus)
