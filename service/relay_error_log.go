@@ -113,9 +113,6 @@ func recordRelayErrorLog(c *gin.Context, apiErr *types.NewAPIError) {
 	other["error_type"] = apiErr.GetErrorType()
 	other["error_code"] = apiErr.GetErrorCode()
 	other["status_code"] = apiErr.StatusCode
-	if IsTPMInsufficientError(apiErr) {
-		other["error_reason"] = "tpm_insufficient"
-	}
 	other["channel_id"] = channelId
 	other["channel_name"] = c.GetString("channel_name")
 	other["channel_type"] = c.GetInt("channel_type")
