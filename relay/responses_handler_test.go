@@ -74,6 +74,16 @@ func TestIsEncryptedReasoningError(t *testing.T) {
 			want: true,
 		},
 		{
+			name:       "bedrock bare invalid encrypted view with validation_error",
+			statusCode: http.StatusBadRequest,
+			err: types.WithOpenAIError(types.OpenAIError{
+				Message: "invalid encrypted view",
+				Type:    "invalid_request_error",
+				Code:    "validation_error",
+			}, http.StatusBadRequest),
+			want: true,
+		},
+		{
 			name:       "bedrock message field invalid encrypted content",
 			statusCode: http.StatusBadRequest,
 			err: types.NewOpenAIError(

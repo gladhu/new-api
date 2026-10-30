@@ -236,10 +236,12 @@ func isEncryptedReasoningError(statusCode int, err *types.NewAPIError) bool {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
-	// Bedrock often returns the bare message "invalid encrypted content"
-	// with no invalid_encrypted_content code (or only a validation_error code).
+	// Bedrock often returns a bare message with no invalid_encrypted_content
+	// code (or only a validation_error code): "invalid encrypted content",
+	// "invalid encrypted reasoning", or "invalid encrypted view".
 	if strings.Contains(msg, "invalid encrypted content") ||
 		strings.Contains(msg, "invalid encrypted reasoning") ||
+		strings.Contains(msg, "invalid encrypted view") ||
 		strings.Contains(msg, "encrypted reasoning") ||
 		strings.Contains(msg, "encrypted content could not be decrypted") ||
 		strings.Contains(msg, "encrypted content could not be verified") {
