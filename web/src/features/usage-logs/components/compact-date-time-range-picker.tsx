@@ -85,8 +85,11 @@ export function CompactDateTimeRangePicker({
     setOpen(false)
   }
 
-  const applyPreset = (kind: 'today' | '7d' | 'week' | '30d' | 'month') => {
+  const applyPreset = (
+    kind: 'today' | '7d' | 'week' | '30d' | 'month' | 'lastMonth'
+  ) => {
     const now = dayjs()
+    const lastMonth = now.startOf('month').subtract(1, 'month')
     const presets = {
       today: {
         start: now.startOf('day').toDate(),
@@ -107,6 +110,10 @@ export function CompactDateTimeRangePicker({
       month: {
         start: now.startOf('month').toDate(),
         end: now.endOf('month').toDate(),
+      },
+      lastMonth: {
+        start: lastMonth.startOf('month').toDate(),
+        end: lastMonth.endOf('month').toDate(),
       },
     }
     const range = presets[kind]
@@ -212,6 +219,15 @@ export function CompactDateTimeRangePicker({
               onClick={() => applyPreset('month')}
             >
               {t('This month')}
+            </Button>
+            <Button
+              type='button'
+              variant='secondary'
+              size='sm'
+              className='h-7 flex-1 px-2 text-xs'
+              onClick={() => applyPreset('lastMonth')}
+            >
+              {t('Last month')}
             </Button>
           </div>
 
