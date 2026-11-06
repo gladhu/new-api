@@ -107,7 +107,11 @@ export function CumulativeConsumptionChart(
       points: query.data?.points ?? [],
       now: fetchedAt > 0 ? new Date(fetchedAt) : new Date(),
       compareDate,
-      labels: { today: t('Today'), yesterday: t('Yesterday') },
+      labels: {
+        today: t('Today'),
+        yesterday: t('Yesterday'),
+        lastWeek: t('Same day last week'),
+      },
     })
   }, [compareDate, fetchedAt, query.data?.points, query.isSuccess, t])
 

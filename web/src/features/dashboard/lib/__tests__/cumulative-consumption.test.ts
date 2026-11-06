@@ -25,7 +25,11 @@ import {
   isSelectableCompareDay,
 } from '@/features/dashboard/lib/cumulative-consumption'
 
-const labels = { today: 'Today', yesterday: 'Yesterday' }
+const labels = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  lastWeek: 'Same day last week',
+}
 
 function unix(date: Date): number {
   return Math.floor(date.getTime() / 1000)
@@ -83,6 +87,36 @@ describe('cumulative consumption comparison', () => {
     expect(compare[0]?.series).toBe('2026-10-27')
     expect(compare[1]).toMatchObject({ hour: '01:00', quota: 5, hourly: 5 })
     expect(compare[23]).toMatchObject({ hour: '23:00', quota: 5, hourly: 0 })
+  })
+
+  test('adds a full-day curve for the same weekday one week ago', () => {
+    const series = buildCumulativeConsumptionSeries({
+      now,
+      labels,
+      points: [
+        { created_at: unix(new Date(2026, 9, 22, 9, 0, 0)), quota: 30 },
+        { created_at: unix(new Date(2026, 9, 22, 21, 0, 0)), quota: 70 },
+        { created_at: unix(new Date(2026, 9, 21, 9, 0, 0)), quota: 999 },
+      ],
+    })
+
+    const lastWeek = series.filter((point) => point.kind === 'lastWeek')
+    expect(lastWeek).toHaveLength(24)
+    expect(lastWeek[0]?.series).toBe('Same day last week')
+    expect(lastWeek[9]).toMatchObject({ hour: '09:00', quota: 30, hourly: 30 })
+    expect(lastWeek[23]).toMatchObject({ hour: '23:00', quota: 100, hourly: 0 })
+  })
+
+  test('does not duplicate the last-week curve when it is picked as the comparison day', () => {
+    const series = buildCumulativeConsumptionSeries({
+      now,
+      labels,
+      compareDate: new Date(2026, 9, 22),
+      points: [],
+    })
+
+    expect(series.some((point) => point.kind === 'compare')).toBe(false)
+    expect(series.some((point) => point.kind === 'lastWeek')).toBe(true)
   })
 
   test('ignores a comparison day that is today or yesterday', () => {

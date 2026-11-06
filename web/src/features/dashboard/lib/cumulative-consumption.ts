@@ -24,7 +24,11 @@ export const CUMULATIVE_COMPARE_LOOKBACK_DAYS = 30
 
 const HOURS_IN_DAY = 24
 
-export type CumulativeDayKind = 'today' | 'yesterday' | 'compare'
+export type CumulativeDayKind =
+  | 'today'
+  | 'yesterday'
+  | 'lastWeek'
+  | 'compare'
 
 export interface CumulativeConsumptionPoint {
   hour: string
@@ -38,6 +42,7 @@ export interface CumulativeConsumptionPoint {
 export interface CumulativeConsumptionLabels {
   today: string
   yesterday: string
+  lastWeek: string
 }
 
 export function formatCumulativeDayLabel(date: Date): string {
@@ -154,11 +159,19 @@ export function buildCumulativeConsumptionSeries(input: {
       input.labels.yesterday,
       'yesterday'
     ),
+    ...toCumulativeSeries(
+      accumulateDay(input.points, shiftLocalDays(input.now, -7)),
+      HOURS_IN_DAY - 1,
+      input.labels.lastWeek,
+      'lastWeek'
+    ),
   ]
 
   if (
     input.compareDate &&
-    isSelectableCompareDay(input.compareDate, input.now)
+    isSelectableCompareDay(input.compareDate, input.now) &&
+    localDayKey(input.compareDate) !==
+      localDayKey(shiftLocalDays(input.now, -7))
   ) {
     const compareDay = getStartOfDay(input.compareDate)
     series.push(
