@@ -24,19 +24,40 @@ export const CUMULATIVE_COMPARE_LOOKBACK_DAYS = 30
 
 const HOURS_IN_DAY = 24
 
-export type CumulativeDayKind =
-  | 'today'
-  | 'yesterday'
-  | 'lastWeek'
-  | 'compare'
+export type CumulativeDayKind = 'today' | 'yesterday' | 'lastWeek' | 'compare'
+
+export type HourlyMetric =
+  | 'quota'
+  | 'tokens'
+  | 'inputTokens'
+  | 'outputTokens'
+  | 'count'
 
 export interface CumulativeConsumptionPoint {
   hour: string
   hourIndex: number
   series: string
   kind: CumulativeDayKind
-  quota: number
+  value: number
   hourly: number
+}
+
+export function getHourlyMetricValue(
+  row: HourlyQuotaPoint,
+  metric: HourlyMetric
+): number {
+  switch (metric) {
+    case 'quota':
+      return row.quota
+    case 'tokens':
+      return row.token_used ?? 0
+    case 'inputTokens':
+      return row.prompt_tokens ?? 0
+    case 'outputTokens':
+      return row.completion_tokens ?? 0
+    case 'count':
+      return row.count ?? 0
+  }
 }
 
 export interface CumulativeConsumptionLabels {
@@ -98,6 +119,7 @@ function shiftLocalDays(date: Date, days: number): Date {
 
 function accumulateDay(
   rows: HourlyQuotaPoint[],
+  metric: HourlyMetric,
   day: Date,
   capAt?: Date
 ): number[] {
@@ -108,8 +130,8 @@ function accumulateDay(
     const instant = new Date(row.created_at * 1000)
     if (localDayKey(instant) !== dayKey) continue
     if (capAt && instant.getTime() > capAt.getTime()) continue
-    const quota = Number.isFinite(row.quota) ? row.quota : 0
-    buckets[instant.getHours()] += quota
+    const value = getHourlyMetricValue(row, metric)
+    buckets[instant.getHours()] += Number.isFinite(value) ? value : 0
   }
   return buckets
 }
@@ -131,7 +153,7 @@ function toCumulativeSeries(
       hourIndex: hour,
       series,
       kind,
-      quota: cumulative,
+      value: cumulative,
       hourly,
     })
   }
@@ -140,12 +162,17 @@ function toCumulativeSeries(
 
 export function buildCumulativeConsumptionSeries(input: {
   points: HourlyQuotaPoint[]
+  metric: HourlyMetric
   now: Date
   compareDate?: Date | null
   labels: CumulativeConsumptionLabels
 }): CumulativeConsumptionPoint[] {
-  const today = accumulateDay(input.points, input.now, input.now)
-  const yesterday = accumulateDay(input.points, shiftLocalDays(input.now, -1))
+  const today = accumulateDay(input.points, input.metric, input.now, input.now)
+  const yesterday = accumulateDay(
+    input.points,
+    input.metric,
+    shiftLocalDays(input.now, -1)
+  )
   const series = [
     ...toCumulativeSeries(
       today,
@@ -160,7 +187,7 @@ export function buildCumulativeConsumptionSeries(input: {
       'yesterday'
     ),
     ...toCumulativeSeries(
-      accumulateDay(input.points, shiftLocalDays(input.now, -7)),
+      accumulateDay(input.points, input.metric, shiftLocalDays(input.now, -7)),
       HOURS_IN_DAY - 1,
       input.labels.lastWeek,
       'lastWeek'
@@ -176,7 +203,7 @@ export function buildCumulativeConsumptionSeries(input: {
     const compareDay = getStartOfDay(input.compareDate)
     series.push(
       ...toCumulativeSeries(
-        accumulateDay(input.points, compareDay),
+        accumulateDay(input.points, input.metric, compareDay),
         HOURS_IN_DAY - 1,
         formatCumulativeDayLabel(compareDay),
         'compare'
@@ -190,14 +217,14 @@ export function buildCumulativeConsumptionSeries(input: {
 export function buildCumulativeConsumptionSpec(input: {
   points: CumulativeConsumptionPoint[]
   resolvedTheme: string
-  formatQuotaValue: (quota: number) => string
+  formatValue: (value: number) => string
   formatPoint: (point: CumulativeConsumptionPoint) => string
 }) {
   const seriesOrder: string[] = []
-  let maxQuota = 0
+  let maxValue = 0
   for (const point of input.points) {
     if (!seriesOrder.includes(point.series)) seriesOrder.push(point.series)
-    if (point.quota > maxQuota) maxQuota = point.quota
+    if (point.value > maxValue) maxValue = point.value
   }
   const palette = getDashboardChartColors(Math.max(seriesOrder.length, 1))
   const textColor =
@@ -213,7 +240,7 @@ export function buildCumulativeConsumptionSpec(input: {
     type: 'line' as const,
     data: [{ id: 'cumulative-consumption', values: input.points }],
     xField: 'hour',
-    yField: 'quota',
+    yField: 'value',
     seriesField: 'series',
     color: palette.slice(0, Math.max(seriesOrder.length, 1)),
     legends: { visible: true, orient: 'bottom' as const },
@@ -256,12 +283,12 @@ export function buildCumulativeConsumptionSpec(input: {
       {
         orient: 'left' as const,
         min: 0,
-        ...(maxQuota === 0 ? { max: 1 } : {}),
+        ...(maxValue === 0 ? { max: 1 } : {}),
         label: {
           formatMethod: (value: number | string) => {
             const numeric = Number(value)
             if (!Number.isFinite(numeric)) return String(value)
-            return input.formatQuotaValue(numeric)
+            return input.formatValue(numeric)
           },
           style: { fill: textColor, fontSize: 10 },
         },

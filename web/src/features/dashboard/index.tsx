@@ -72,9 +72,9 @@ const LazyModelCharts = lazy(() =>
   }))
 )
 
-const LazyCumulativeConsumptionChart = lazy(() =>
-  import('./components/models/cumulative-consumption-chart').then((m) => ({
-    default: m.CumulativeConsumptionChart,
+const LazyHourlyComparisonChart = lazy(() =>
+  import('./components/models/hourly-comparison-chart').then((m) => ({
+    default: m.HourlyComparisonChart,
   }))
 )
 
@@ -357,7 +357,16 @@ export function Dashboard() {
               </FadeIn>
               <FadeIn delay={0.05}>
                 <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyCumulativeConsumptionChart
+                  <LazyHourlyComparisonChart
+                    kind='quota'
+                    username={modelFilters.username}
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.05}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyHourlyComparisonChart
+                    kind='tokens'
                     username={modelFilters.username}
                   />
                 </Suspense>
@@ -398,6 +407,7 @@ export function Dashboard() {
                     loading={dataLoading}
                     chartTimeRange={modelChartTimeRange}
                     defaultChartTab={chartPreferences.modelAnalyticsChart}
+                    username={modelFilters.username}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }

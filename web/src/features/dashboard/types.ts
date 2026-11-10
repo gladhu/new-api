@@ -36,6 +36,10 @@ export interface QuotaDataItem {
 export interface HourlyQuotaPoint {
   created_at: number
   quota: number
+  count?: number
+  token_used?: number
+  prompt_tokens?: number
+  completion_tokens?: number
 }
 
 export interface CumulativeQuotaData {

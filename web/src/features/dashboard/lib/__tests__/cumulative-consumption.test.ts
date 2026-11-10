@@ -41,6 +41,7 @@ describe('cumulative consumption comparison', () => {
   test('accumulates today through the current hour and keeps yesterday full', () => {
     const series = buildCumulativeConsumptionSeries({
       now,
+      metric: 'quota',
       labels,
       points: [
         { created_at: unix(new Date(2026, 9, 29, 10, 0, 0)), quota: 100 },
@@ -57,23 +58,24 @@ describe('cumulative consumption comparison', () => {
     const yesterday = series.filter((point) => point.kind === 'yesterday')
 
     expect(today).toHaveLength(16)
-    expect(today[10]).toMatchObject({ hour: '10:00', quota: 120, hourly: 120 })
-    expect(today[14]).toMatchObject({ hour: '14:00', quota: 120, hourly: 0 })
-    expect(today[15]).toMatchObject({ hour: '15:00', quota: 170, hourly: 50 })
+    expect(today[10]).toMatchObject({ hour: '10:00', value: 120, hourly: 120 })
+    expect(today[14]).toMatchObject({ hour: '14:00', value: 120, hourly: 0 })
+    expect(today[15]).toMatchObject({ hour: '15:00', value: 170, hourly: 50 })
     expect(yesterday).toHaveLength(24)
-    expect(yesterday[8]).toMatchObject({ hour: '08:00', quota: 10, hourly: 10 })
+    expect(yesterday[8]).toMatchObject({ hour: '08:00', value: 10, hourly: 10 })
     expect(yesterday[20]).toMatchObject({
       hour: '20:00',
-      quota: 50,
+      value: 50,
       hourly: 40,
     })
-    expect(yesterday[23]).toMatchObject({ hour: '23:00', quota: 50, hourly: 0 })
+    expect(yesterday[23]).toMatchObject({ hour: '23:00', value: 50, hourly: 0 })
     expect(series.some((point) => point.kind === 'compare')).toBe(false)
   })
 
   test('adds a zero-filled curve for another day inside the last month', () => {
     const series = buildCumulativeConsumptionSeries({
       now,
+      metric: 'quota',
       labels,
       compareDate: new Date(2026, 9, 27, 18, 0, 0),
       points: [
@@ -85,13 +87,14 @@ describe('cumulative consumption comparison', () => {
     const compare = series.filter((point) => point.kind === 'compare')
     expect(compare).toHaveLength(24)
     expect(compare[0]?.series).toBe('2026-10-27')
-    expect(compare[1]).toMatchObject({ hour: '01:00', quota: 5, hourly: 5 })
-    expect(compare[23]).toMatchObject({ hour: '23:00', quota: 5, hourly: 0 })
+    expect(compare[1]).toMatchObject({ hour: '01:00', value: 5, hourly: 5 })
+    expect(compare[23]).toMatchObject({ hour: '23:00', value: 5, hourly: 0 })
   })
 
   test('adds a full-day curve for the same weekday one week ago', () => {
     const series = buildCumulativeConsumptionSeries({
       now,
+      metric: 'quota',
       labels,
       points: [
         { created_at: unix(new Date(2026, 9, 22, 9, 0, 0)), quota: 30 },
@@ -103,13 +106,14 @@ describe('cumulative consumption comparison', () => {
     const lastWeek = series.filter((point) => point.kind === 'lastWeek')
     expect(lastWeek).toHaveLength(24)
     expect(lastWeek[0]?.series).toBe('Same day last week')
-    expect(lastWeek[9]).toMatchObject({ hour: '09:00', quota: 30, hourly: 30 })
-    expect(lastWeek[23]).toMatchObject({ hour: '23:00', quota: 100, hourly: 0 })
+    expect(lastWeek[9]).toMatchObject({ hour: '09:00', value: 30, hourly: 30 })
+    expect(lastWeek[23]).toMatchObject({ hour: '23:00', value: 100, hourly: 0 })
   })
 
   test('does not duplicate the last-week curve when it is picked as the comparison day', () => {
     const series = buildCumulativeConsumptionSeries({
       now,
+      metric: 'quota',
       labels,
       compareDate: new Date(2026, 9, 22),
       points: [],
@@ -122,6 +126,7 @@ describe('cumulative consumption comparison', () => {
   test('ignores a comparison day that is today or yesterday', () => {
     const series = buildCumulativeConsumptionSeries({
       now,
+      metric: 'quota',
       labels,
       compareDate: new Date(2026, 9, 28, 12, 0, 0),
       points: [],
@@ -146,20 +151,67 @@ describe('cumulative consumption comparison', () => {
     )
   })
 
+  test.each([
+    ['tokens', [150, 15]],
+    ['inputTokens', [100, 10]],
+    ['outputTokens', [50, 5]],
+    ['count', [3, 1]],
+  ] as const)(
+    'sums the %s metric per hour and ignores rows missing that field',
+    (metric, [firstHour, secondHour]) => {
+      const series = buildCumulativeConsumptionSeries({
+        now,
+        metric,
+        labels,
+        points: [
+          {
+            created_at: unix(new Date(2026, 9, 29, 9, 0, 0)),
+            quota: 999,
+            token_used: 150,
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            count: 3,
+          },
+          {
+            created_at: unix(new Date(2026, 9, 29, 10, 0, 0)),
+            quota: 999,
+            token_used: 15,
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            count: 1,
+          },
+          { created_at: unix(new Date(2026, 9, 29, 11, 0, 0)), quota: 999 },
+        ],
+      })
+
+      const today = series.filter((point) => point.kind === 'today')
+      expect(today[9]).toMatchObject({ value: firstHour, hourly: firstHour })
+      expect(today[10]).toMatchObject({
+        value: firstHour + secondHour,
+        hourly: secondHour,
+      })
+      expect(today[11]).toMatchObject({
+        value: firstHour + secondHour,
+        hourly: 0,
+      })
+    }
+  )
+
   test('formats the tooltip with cumulative and hourly quota and keeps a zero axis usable', () => {
     const series = buildCumulativeConsumptionSeries({
       now,
+      metric: 'quota',
       labels,
       points: [],
     })
     const spec = buildCumulativeConsumptionSpec({
       points: series,
       resolvedTheme: 'light',
-      formatQuotaValue: (quota) => `q:${quota}`,
-      formatPoint: (point) => `${point.quota}/${point.hourly}`,
+      formatValue: (value) => `q:${value}`,
+      formatPoint: (point) => `${point.value}/${point.hourly}`,
     })
 
-    expect(spec.yField).toBe('quota')
+    expect(spec.yField).toBe('value')
     expect(spec.xField).toBe('hour')
     const leftAxis = spec.axes.find((axis) => axis.orient === 'left')
     if (!leftAxis || leftAxis.orient !== 'left') {

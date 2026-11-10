@@ -564,6 +564,20 @@ export const STATIC_I18N_KEYS = [
   'The model that was requested',
   'The upstream channel that served the requests',
 
+  // Dashboard hourly comparison charts (config labels passed to t at runtime)
+  'Cumulative consumption',
+  'Compare cumulative quota by time of day',
+  'Failed to load cumulative consumption',
+  'Token usage',
+  'Compare cumulative token usage by time of day',
+  'Failed to load token usage',
+  'All tokens',
+  'Input tokens',
+  'Output tokens',
+  'Call Trend',
+  'Compare cumulative calls by time of day',
+  'Failed to load call trend',
+
   // Dashboard time ranges & health windows
   '1 Day',
   '3 Days',

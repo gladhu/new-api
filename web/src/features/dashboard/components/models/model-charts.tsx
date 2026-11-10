@@ -24,14 +24,12 @@ import { useTranslation } from 'react-i18next'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
+import { HourlyComparisonChart } from '@/features/dashboard/components/models/hourly-comparison-chart'
 import {
   DEFAULT_TIME_GRANULARITY,
   MODEL_ANALYTICS_CHART_OPTIONS,
 } from '@/features/dashboard/constants'
-import {
-  processChartData,
-  type ChartTimeRange,
-} from '@/features/dashboard/lib'
+import { processChartData, type ChartTimeRange } from '@/features/dashboard/lib'
 import type {
   ModelAnalyticsChartTab,
   QuotaDataItem,
@@ -58,7 +56,15 @@ interface ModelChartsProps {
   chartTimeRange?: ChartTimeRange
   timeGranularity?: TimeGranularity
   defaultChartTab?: ModelAnalyticsChartTab
+  username?: string
 }
+
+type TrendView = 'comparison' | 'range'
+
+const TREND_VIEW_OPTIONS: { value: TrendView; labelKey: string }[] = [
+  { value: 'comparison', labelKey: 'Day comparison' },
+  { value: 'range', labelKey: 'Time range' },
+]
 
 export function ModelCharts(props: ModelChartsProps) {
   const { t } = useTranslation()
@@ -71,6 +77,7 @@ export function ModelCharts(props: ModelChartsProps) {
   const [activeTab, setActiveTab] = useState<ModelAnalyticsChartTab>(
     props.defaultChartTab ?? 'trend'
   )
+  const [trendView, setTrendView] = useState<TrendView>('comparison')
   const [themeReady, setThemeReady] = useState(false)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
@@ -119,6 +126,7 @@ export function ModelCharts(props: ModelChartsProps) {
     ]
   )
 
+  const showDayComparison = activeTab === 'trend' && trendView === 'comparison'
   const spec = chartData[CHART_SPEC_KEYS[activeTab]]
   const specType = typeof spec?.type === 'string' ? spec.type : activeTab
   const chartKey = [
@@ -145,37 +153,66 @@ export function ModelCharts(props: ModelChartsProps) {
           </span>
         </div>
 
-        <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
-          {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
-            <button
-              key={tab.value}
-              type='button'
-              onClick={() => setActiveTab(tab.value)}
-              className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
-                activeTab === tab.value
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {t(tab.labelKey)}
-            </button>
-          ))}
+        <div className='flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center'>
+          {activeTab === 'trend' && (
+            <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
+              {TREND_VIEW_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type='button'
+                  aria-pressed={trendView === option.value}
+                  onClick={() => setTrendView(option.value)}
+                  className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
+                    trendView === option.value
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t(option.labelKey)}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
+            {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
+              <button
+                key={tab.value}
+                type='button'
+                onClick={() => setActiveTab(tab.value)}
+                className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
+                  activeTab === tab.value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
-        {themeReady && spec && (
-          <VChart
-            key={`${chartKey}-${props.chartTimeRange?.start_timestamp ?? 0}-${props.chartTimeRange?.end_timestamp ?? 0}-${timeGranularity}`}
-            spec={{
-              ...spec,
-              theme: resolvedTheme === 'dark' ? 'dark' : 'light',
-              background: 'transparent',
-            }}
-            option={VCHART_OPTION}
-          />
-        )}
-      </div>
+      {showDayComparison ? (
+        <HourlyComparisonChart
+          kind='calls'
+          username={props.username}
+          embedded
+        />
+      ) : (
+        <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
+          {themeReady && spec && (
+            <VChart
+              key={`${chartKey}-${props.chartTimeRange?.start_timestamp ?? 0}-${props.chartTimeRange?.end_timestamp ?? 0}-${timeGranularity}`}
+              spec={{
+                ...spec,
+                theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+                background: 'transparent',
+              }}
+              option={VCHART_OPTION}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
 }

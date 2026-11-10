@@ -24,7 +24,10 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { formatCumulativeDayLabel } from '@/features/dashboard/lib/cumulative-consumption'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CumulativeConsumptionChart } from '../cumulative-consumption-chart'
+import {
+  HourlyComparisonChart,
+  type HourlyComparisonKind,
+} from '../hourly-comparison-chart'
 
 const { getCumulativeQuota } = vi.hoisted(() => ({
   getCumulativeQuota: vi.fn(),
@@ -42,18 +45,18 @@ vi.mock('@/lib/use-chart-theme', () => ({
   useChartTheme: () => ({ resolvedTheme: 'light', themeReady: true }),
 }))
 
-function renderChart(username?: string) {
+function renderChart(username?: string, kind: HourlyComparisonKind = 'quota') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <CumulativeConsumptionChart username={username} />
+      <HourlyComparisonChart kind={kind} username={username} />
     </QueryClientProvider>
   )
 }
 
-describe('cumulative consumption chart controls', () => {
+describe('hourly comparison chart controls', () => {
   afterEach(() => {
     getCumulativeQuota.mockReset()
     useAuthStore.getState().auth.setUser(null)
@@ -164,5 +167,36 @@ describe('cumulative consumption chart controls', () => {
     expect(
       screen.getByRole('button', { name: 'Compare another day' })
     ).toBeVisible()
+  })
+
+  test('lets the token chart switch between all, input and output tokens without refetching', async () => {
+    const user = userEvent.setup()
+    getCumulativeQuota.mockResolvedValue({ models: ['gpt-4o'], points: [] })
+
+    renderChart(undefined, 'tokens')
+
+    expect(screen.getByRole('region', { name: 'Token usage' })).toBeVisible()
+    await waitFor(() => expect(getCumulativeQuota).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('tab', { name: 'All tokens' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Output tokens' }))
+
+    expect(screen.getByRole('tab', { name: 'Output tokens' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(getCumulativeQuota).toHaveBeenCalledTimes(1)
+  })
+
+  test('shows the call trend error and no token tabs when the request fails', async () => {
+    getCumulativeQuota.mockRejectedValue(new Error('down'))
+
+    renderChart(undefined, 'calls')
+
+    expect(await screen.findByText('Failed to load call trend')).toBeVisible()
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
   })
 })

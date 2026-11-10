@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
-import { LineChart, X } from 'lucide-react'
+import { Coins, LineChart, Activity, X, type LucideIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -28,6 +28,7 @@ import { Combobox } from '@/components/ui/combobox'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getCumulativeQuota } from '@/features/dashboard/api'
 import {
   buildCumulativeConsumptionSeries,
@@ -36,27 +37,82 @@ import {
   getCumulativeCompareBounds,
   getCumulativeQueryRange,
   isSelectableCompareDay,
+  type HourlyMetric,
 } from '@/features/dashboard/lib/cumulative-consumption'
-import { formatQuota } from '@/lib/format'
+import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { getStartOfDay } from '@/lib/time'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useAuthStore } from '@/stores/auth-store'
 
-interface CumulativeConsumptionChartProps {
-  username?: string
+export type HourlyComparisonKind = 'quota' | 'tokens' | 'calls'
+
+interface HourlyComparisonConfig {
+  titleKey: string
+  descriptionKey: string
+  errorKey: string
+  icon: LucideIcon
+  metrics: { value: HourlyMetric; labelKey: string }[]
+  formatAxis: (value: number) => string
+  formatValue: (value: number) => string
 }
 
-export function CumulativeConsumptionChart(
-  props: CumulativeConsumptionChartProps
-) {
+const HOURLY_COMPARISON_CONFIGS: Record<
+  HourlyComparisonKind,
+  HourlyComparisonConfig
+> = {
+  quota: {
+    titleKey: 'Cumulative consumption',
+    descriptionKey: 'Compare cumulative quota by time of day',
+    errorKey: 'Failed to load cumulative consumption',
+    icon: LineChart,
+    metrics: [{ value: 'quota', labelKey: 'Cumulative consumption' }],
+    formatAxis: (value) => formatQuota(value),
+    formatValue: (value) => formatQuota(value),
+  },
+  tokens: {
+    titleKey: 'Token usage',
+    descriptionKey: 'Compare cumulative token usage by time of day',
+    errorKey: 'Failed to load token usage',
+    icon: Coins,
+    metrics: [
+      { value: 'tokens', labelKey: 'All tokens' },
+      { value: 'inputTokens', labelKey: 'Input tokens' },
+      { value: 'outputTokens', labelKey: 'Output tokens' },
+    ],
+    formatAxis: (value) => formatCompactNumber(value),
+    formatValue: (value) => formatNumber(value),
+  },
+  calls: {
+    titleKey: 'Call Trend',
+    descriptionKey: 'Compare cumulative calls by time of day',
+    errorKey: 'Failed to load call trend',
+    icon: Activity,
+    metrics: [{ value: 'count', labelKey: 'Call Trend' }],
+    formatAxis: (value) => formatCompactNumber(value),
+    formatValue: (value) => formatNumber(value),
+  },
+}
+
+interface HourlyComparisonChartProps {
+  kind: HourlyComparisonKind
+  username?: string
+  // Render only the controls and the chart so a parent card can supply the title.
+  embedded?: boolean
+}
+
+export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
   const { t } = useTranslation()
+  const config = HOURLY_COMPARISON_CONFIGS[props.kind]
   const { resolvedTheme, themeReady } = useChartTheme()
   const userRole = useAuthStore((state) => state.auth.user?.role)
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
   const [selectedModel, setSelectedModel] = useState('')
   const [compareDate, setCompareDate] = useState<Date | undefined>(undefined)
+  const [metric, setMetric] = useState<HourlyMetric>(
+    config.metrics[0]?.value ?? 'quota'
+  )
 
   const username = isAdmin ? props.username?.trim() : undefined
   const range = getCumulativeQueryRange(new Date())
@@ -65,7 +121,7 @@ export function CumulativeConsumptionChart(
   const query = useQuery({
     queryKey: [
       'dashboard',
-      'cumulative-consumption',
+      'hourly-usage',
       isAdmin,
       username ?? '',
       selectedModel,
@@ -105,6 +161,7 @@ export function CumulativeConsumptionChart(
     if (!query.isSuccess) return []
     return buildCumulativeConsumptionSeries({
       points: query.data?.points ?? [],
+      metric,
       now: fetchedAt > 0 ? new Date(fetchedAt) : new Date(),
       compareDate,
       labels: {
@@ -113,21 +170,21 @@ export function CumulativeConsumptionChart(
         lastWeek: t('Same day last week'),
       },
     })
-  }, [compareDate, fetchedAt, query.data?.points, query.isSuccess, t])
+  }, [compareDate, fetchedAt, metric, query.data?.points, query.isSuccess, t])
 
   const todayTotal =
-    [...series].reverse().find((point) => point.kind === 'today')?.quota ?? 0
+    [...series].reverse().find((point) => point.kind === 'today')?.value ?? 0
 
   const spec = useMemo(() => {
     if (!query.isSuccess) return null
     return buildCumulativeConsumptionSpec({
       points: series,
       resolvedTheme,
-      formatQuotaValue: (quota) => formatQuota(quota),
+      formatValue: config.formatAxis,
       formatPoint: (point) =>
-        `${formatQuota(point.quota)} (${t('This hour')} ${formatQuota(point.hourly)})`,
+        `${config.formatValue(point.value)} (${t('This hour')} ${config.formatValue(point.hourly)})`,
     })
-  }, [query.isSuccess, resolvedTheme, series, t])
+  }, [config, query.isSuccess, resolvedTheme, series, t])
 
   const compareLabel = compareDate
     ? `${t('Compare another day')}: ${formatCumulativeDayLabel(compareDate)}`
@@ -139,13 +196,13 @@ export function CumulativeConsumptionChart(
   } else if (query.isError) {
     chartBody = (
       <div className='text-muted-foreground flex h-full items-center justify-center px-4 text-center text-xs'>
-        {t('Failed to load cumulative consumption')}
+        {t(config.errorKey)}
       </div>
     )
   } else if (themeReady && spec) {
     chartBody = (
       <VChart
-        key={`${selectedModel}-${compareDate?.getTime() ?? 'none'}-${resolvedTheme}-${series.length}`}
+        key={`${metric}-${selectedModel}-${compareDate?.getTime() ?? 'none'}-${resolvedTheme}-${series.length}`}
         spec={{
           ...spec,
           theme: resolvedTheme === 'dark' ? 'dark' : 'light',
@@ -158,43 +215,68 @@ export function CumulativeConsumptionChart(
     chartBody = <Skeleton className='h-full w-full' />
   }
 
+  const todaySummary = query.isSuccess ? (
+    <span className='text-muted-foreground text-xs'>
+      {t('Today')} {config.formatValue(todayTotal)}
+    </span>
+  ) : null
+
+  const titleId = `hourly-comparison-${props.kind}-title`
+  const modelId = `hourly-comparison-${props.kind}-model`
+  const Icon = config.icon
+
   return (
     <section
-      className='overflow-hidden rounded-lg border'
-      aria-labelledby='cumulative-consumption-title'
+      className={
+        props.embedded ? undefined : 'overflow-hidden rounded-lg border'
+      }
+      aria-label={t(config.titleKey)}
     >
       <div className='flex w-full flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
-        <div className='flex min-w-0 items-center gap-2'>
-          <IconBadge tone='chart-2' size='sm'>
-            <LineChart />
-          </IconBadge>
-          <div className='min-w-0'>
-            <div className='flex flex-wrap items-baseline gap-x-2'>
-              <div
-                id='cumulative-consumption-title'
-                className='text-sm font-semibold'
-              >
-                {t('Cumulative consumption')}
+        {props.embedded ? (
+          <div className='flex flex-wrap items-baseline gap-x-2'>
+            {todaySummary}
+          </div>
+        ) : (
+          <div className='flex min-w-0 items-center gap-2'>
+            <IconBadge tone='chart-2' size='sm'>
+              <Icon />
+            </IconBadge>
+            <div className='min-w-0'>
+              <div className='flex flex-wrap items-baseline gap-x-2'>
+                <div id={titleId} className='text-sm font-semibold'>
+                  {t(config.titleKey)}
+                </div>
+                {todaySummary}
               </div>
-              {query.isSuccess ? (
-                <span className='text-muted-foreground text-xs'>
-                  {t('Today')} {formatQuota(todayTotal)}
-                </span>
-              ) : null}
-            </div>
-            <div className='text-muted-foreground text-xs'>
-              {t('Compare cumulative quota by time of day')}
+              <div className='text-muted-foreground text-xs'>
+                {t(config.descriptionKey)}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className='flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto'>
+        <div className='flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto'>
+          {config.metrics.length > 1 ? (
+            <Tabs
+              value={metric}
+              onValueChange={(value) => setMetric(value as HourlyMetric)}
+            >
+              <TabsList>
+                {config.metrics.map((item) => (
+                  <TabsTrigger key={item.value} value={item.value}>
+                    {t(item.labelKey)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : null}
           <div className='min-w-0 flex-1 sm:w-[220px] sm:flex-none'>
-            <Label htmlFor='cumulative-consumption-model' className='sr-only'>
+            <Label htmlFor={modelId} className='sr-only'>
               {t('Model Name')}
             </Label>
             <Combobox
-              id='cumulative-consumption-model'
+              id={modelId}
               options={modelOptions}
               value={selectedModel}
               onValueChange={(value) => setSelectedModel(value ?? '')}

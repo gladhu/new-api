@@ -23,6 +23,9 @@ type QuotaData struct {
 	TokenUsed int    `json:"token_used" gorm:"default:0"`
 	Count     int    `json:"count" gorm:"default:0"`
 	Quota     int    `json:"quota" gorm:"default:0"`
+	// PromptTokens/CompletionTokens 只记录新增列之后的数据；TokenUsed 仍是两者之和，历史行只有 TokenUsed。
+	PromptTokens     int `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens int `json:"completion_tokens" gorm:"default:0"`
 }
 
 type QuotaDataLogParams struct {
@@ -36,6 +39,9 @@ type QuotaDataLogParams struct {
 	TokenID   int
 	ChannelID int
 	NodeName  string
+
+	PromptTokens     int
+	CompletionTokens int
 }
 
 func UpdateQuotaData() {
@@ -65,11 +71,15 @@ func logQuotaDataCache(quotaData *QuotaData) {
 	count := quotaData.Count
 	quota := quotaData.Quota
 	tokenUsed := quotaData.TokenUsed
+	promptTokens := quotaData.PromptTokens
+	completionTokens := quotaData.CompletionTokens
 	cachedQuotaData, ok := CacheQuotaData[key]
 	if ok {
 		cachedQuotaData.Count += count
 		cachedQuotaData.Quota += quota
 		cachedQuotaData.TokenUsed += tokenUsed
+		cachedQuotaData.PromptTokens += promptTokens
+		cachedQuotaData.CompletionTokens += completionTokens
 		quotaData = cachedQuotaData
 	}
 	CacheQuotaData[key] = quotaData
@@ -90,6 +100,9 @@ func LogQuotaData(params QuotaDataLogParams) {
 		Count:     1,
 		Quota:     params.Quota,
 		TokenUsed: params.TokenUsed,
+
+		PromptTokens:     params.PromptTokens,
+		CompletionTokens: params.CompletionTokens,
 	}
 
 	CacheQuotaDataLock.Lock()
@@ -129,9 +142,11 @@ func increaseQuotaData(quotaData *QuotaData) {
 		Where("user_id = ? and username = ? and model_name = ? and created_at = ? and use_group = ? and token_id = ? and channel_id = ? and node_name = ?",
 			quotaData.UserID, quotaData.Username, quotaData.ModelName, quotaData.CreatedAt, quotaData.UseGroup, quotaData.TokenID, quotaData.ChannelID, quotaData.NodeName).
 		Updates(map[string]interface{}{
-			"count":      gorm.Expr("count + ?", quotaData.Count),
-			"quota":      gorm.Expr("quota + ?", quotaData.Quota),
-			"token_used": gorm.Expr("token_used + ?", quotaData.TokenUsed),
+			"count":             gorm.Expr("count + ?", quotaData.Count),
+			"quota":             gorm.Expr("quota + ?", quotaData.Quota),
+			"token_used":        gorm.Expr("token_used + ?", quotaData.TokenUsed),
+			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", quotaData.PromptTokens),
+			"completion_tokens": gorm.Expr("completion_tokens + ?", quotaData.CompletionTokens),
 		}).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("increaseQuotaData error: %s", err))
@@ -182,14 +197,18 @@ func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaDat
 	return quotaDatas, err
 }
 
-// HourlyQuotaPoint is one hour's summed quota. CreatedAt is the hour bucket
+// HourlyQuotaPoint is one hour's summed usage. CreatedAt is the hour bucket
 // already stored on quota_data (unix seconds truncated to the hour).
 type HourlyQuotaPoint struct {
-	CreatedAt int64 `json:"created_at"`
-	Quota     int   `json:"quota"`
+	CreatedAt        int64 `json:"created_at"`
+	Quota            int   `json:"quota"`
+	Count            int   `json:"count"`
+	TokenUsed        int   `json:"token_used"`
+	PromptTokens     int   `json:"prompt_tokens"`
+	CompletionTokens int   `json:"completion_tokens"`
 }
 
-// CumulativeQuota is the hourly series for the consumption comparison chart,
+// CumulativeQuota is the hourly series for the consumption/token/call comparison charts,
 // plus the model names available in the same window.
 type CumulativeQuota struct {
 	Models []string           `json:"models"`
@@ -237,7 +256,7 @@ func GetCumulativeQuotaData(startTime int64, endTime int64, userID int, username
 	}
 	points := make([]HourlyQuotaPoint, 0)
 	err = pointsQuery.
-		Select("created_at, sum(quota) as quota").
+		Select("created_at, sum(quota) as quota, COALESCE(sum(count), 0) as count, COALESCE(sum(token_used), 0) as token_used, COALESCE(sum(prompt_tokens), 0) as prompt_tokens, COALESCE(sum(completion_tokens), 0) as completion_tokens").
 		Group("created_at").
 		Order("created_at asc").
 		Scan(&points).Error
