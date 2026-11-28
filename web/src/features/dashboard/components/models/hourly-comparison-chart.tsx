@@ -271,11 +271,12 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
     chartBody = <Skeleton className='h-full w-full' />
   }
 
-  const todaySummary = query.isSuccess ? (
-    <span className='text-muted-foreground text-xs'>
-      {t('Today')} {config.formatValue(todayTotal)}
-    </span>
-  ) : null
+  const todaySummary =
+    !isUnitCost && query.isSuccess ? (
+      <span className='text-muted-foreground text-xs'>
+        {t('Today')} {config.formatValue(todayTotal)}
+      </span>
+    ) : null
   const averageSummary =
     isUnitCost && unitCost ? (
       <span className='text-muted-foreground text-xs'>
