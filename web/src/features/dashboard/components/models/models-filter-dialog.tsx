@@ -278,7 +278,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
             </Select>
           </div>
 
-          {props.includeModelName && (
+          {props.includeModelName && isAdmin && (
             <div className='grid gap-2'>
               <Label htmlFor='model_name'>{t('Model Name')}</Label>
               <Input

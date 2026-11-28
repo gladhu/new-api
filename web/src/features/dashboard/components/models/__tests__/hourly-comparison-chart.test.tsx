@@ -45,6 +45,14 @@ vi.mock('@/lib/use-chart-theme', () => ({
   useChartTheme: () => ({ resolvedTheme: 'light', themeReady: true }),
 }))
 
+function signInAsAdmin() {
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'root',
+    role: 10,
+  })
+}
+
 function renderChart(username?: string, kind: HourlyComparisonKind = 'quota') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -62,8 +70,24 @@ describe('hourly comparison chart controls', () => {
     useAuthStore.getState().auth.setUser(null)
   })
 
+  test('does not request comparison data for a regular user', () => {
+    useAuthStore.getState().auth.setUser({
+      id: 2,
+      username: 'alice',
+      role: 1,
+    })
+
+    renderChart('alice')
+
+    expect(
+      screen.queryByRole('region', { name: 'Cumulative consumption' })
+    ).not.toBeInTheDocument()
+    expect(getCumulativeQuota).not.toHaveBeenCalled()
+  })
+
   test('defaults to all models and can switch to one model', async () => {
     const user = userEvent.setup()
+    signInAsAdmin()
     getCumulativeQuota.mockResolvedValue({
       models: ['claude', 'gpt-4o'],
       points: [],
@@ -78,7 +102,7 @@ describe('hourly comparison chart controls', () => {
     expect(getCumulativeQuota.mock.calls[0]?.[0]).not.toHaveProperty(
       'model_name'
     )
-    expect(getCumulativeQuota.mock.calls[0]?.[1]).toBe(false)
+    expect(getCumulativeQuota.mock.calls[0]).toHaveLength(1)
     expect(screen.getByRole('combobox')).toHaveValue('All models')
 
     await user.click(screen.getByRole('combobox'))
@@ -86,8 +110,7 @@ describe('hourly comparison chart controls', () => {
 
     await waitFor(() => {
       expect(getCumulativeQuota).toHaveBeenCalledWith(
-        expect.objectContaining({ model_name: 'gpt-4o' }),
-        false
+        expect.objectContaining({ model_name: 'gpt-4o' })
       )
     })
     expect(screen.getByRole('combobox')).toHaveValue('gpt-4o')
@@ -95,18 +118,13 @@ describe('hourly comparison chart controls', () => {
 
   test('sends the dashboard username only for an admin', async () => {
     getCumulativeQuota.mockResolvedValue({ models: [], points: [] })
-    useAuthStore.getState().auth.setUser({
-      id: 1,
-      username: 'root',
-      role: 10,
-    })
+    signInAsAdmin()
 
     renderChart('  alice  ')
 
     await waitFor(() => expect(getCumulativeQuota).toHaveBeenCalled())
     expect(getCumulativeQuota).toHaveBeenCalledWith(
-      expect.objectContaining({ username: 'alice' }),
-      true
+      expect.objectContaining({ username: 'alice' })
     )
     expect(
       screen.getByRole('button', { name: 'Compare another day' })
@@ -114,9 +132,10 @@ describe('hourly comparison chart controls', () => {
   })
 
   test('shows the load error instead of an empty curve', async () => {
+    signInAsAdmin()
     getCumulativeQuota.mockRejectedValue(new Error('down'))
 
-    renderChart('alice')
+    renderChart()
 
     expect(
       await screen.findByText('Failed to load cumulative consumption')
@@ -126,6 +145,7 @@ describe('hourly comparison chart controls', () => {
 
   test('lets you compare a day in the past month and clear it', async () => {
     const user = userEvent.setup()
+    signInAsAdmin()
     getCumulativeQuota.mockResolvedValue({ models: [], points: [] })
     renderChart()
 
@@ -171,6 +191,7 @@ describe('hourly comparison chart controls', () => {
 
   test('lets the token chart switch between all, input and output tokens without refetching', async () => {
     const user = userEvent.setup()
+    signInAsAdmin()
     getCumulativeQuota.mockResolvedValue({ models: ['gpt-4o'], points: [] })
 
     renderChart(undefined, 'tokens')
@@ -192,6 +213,7 @@ describe('hourly comparison chart controls', () => {
   })
 
   test('shows the call trend error and no token tabs when the request fails', async () => {
+    signInAsAdmin()
     getCumulativeQuota.mockRejectedValue(new Error('down'))
 
     renderChart(undefined, 'calls')

@@ -57,6 +57,7 @@ interface ModelChartsProps {
   timeGranularity?: TimeGranularity
   defaultChartTab?: ModelAnalyticsChartTab
   username?: string
+  allowDayComparison?: boolean
 }
 
 type TrendView = 'comparison' | 'range'
@@ -126,7 +127,9 @@ export function ModelCharts(props: ModelChartsProps) {
     ]
   )
 
-  const showDayComparison = activeTab === 'trend' && trendView === 'comparison'
+  const allowDayComparison = props.allowDayComparison === true
+  const showDayComparison =
+    allowDayComparison && activeTab === 'trend' && trendView === 'comparison'
   const spec = chartData[CHART_SPEC_KEYS[activeTab]]
   const specType = typeof spec?.type === 'string' ? spec.type : activeTab
   const chartKey = [
@@ -154,7 +157,7 @@ export function ModelCharts(props: ModelChartsProps) {
         </div>
 
         <div className='flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center'>
-          {activeTab === 'trend' && (
+          {allowDayComparison && activeTab === 'trend' && (
             <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
               {TREND_VIEW_OPTIONS.map((option) => (
                 <button

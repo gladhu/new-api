@@ -119,8 +119,7 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 		})
 		return
 	}
-	modelName := strings.TrimSpace(c.Query("model_name"))
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", modelName, userId, common.RoleCommonUser)
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", "", userId, common.RoleCommonUser)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -160,13 +159,4 @@ func respondCumulativeQuota(c *gin.Context, userID int, username string) {
 
 func GetCumulativeQuota(c *gin.Context) {
 	respondCumulativeQuota(c, 0, strings.TrimSpace(c.Query("username")))
-}
-
-func GetUserCumulativeQuota(c *gin.Context) {
-	userID := c.GetInt("id")
-	if userID <= 0 {
-		common.ApiErrorMsg(c, "invalid user")
-		return
-	}
-	respondCumulativeQuota(c, userID, "")
 }

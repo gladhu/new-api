@@ -129,15 +129,13 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
       range.end_timestamp,
     ],
     queryFn: () =>
-      getCumulativeQuota(
-        {
-          start_timestamp: range.start_timestamp,
-          end_timestamp: range.end_timestamp,
-          ...(username ? { username } : {}),
-          ...(selectedModel ? { model_name: selectedModel } : {}),
-        },
-        isAdmin
-      ),
+      getCumulativeQuota({
+        start_timestamp: range.start_timestamp,
+        end_timestamp: range.end_timestamp,
+        ...(username ? { username } : {}),
+        ...(selectedModel ? { model_name: selectedModel } : {}),
+      }),
+    enabled: isAdmin,
     staleTime: 60 * 1000,
     refetchInterval: 60 * 1000,
     retry: false,
@@ -224,6 +222,8 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
   const titleId = `hourly-comparison-${props.kind}-title`
   const modelId = `hourly-comparison-${props.kind}-model`
   const Icon = config.icon
+
+  if (!isAdmin) return null
 
   return (
     <section

@@ -57,13 +57,13 @@ describe('flow model name filter', () => {
     useAuthStore.getState().auth.setUser(null)
   })
 
-  test('shows the model name field for a non-admin flow filter', async () => {
+  test('hides the model name field from a non-admin flow filter', async () => {
     const user = userEvent.setup()
     renderFilter({ includeModelName: true })
 
     await user.click(screen.getByRole('button', { name: 'Filter' }))
 
-    expect(screen.getByRole('textbox', { name: 'Model Name' })).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: 'Model Name' })).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Username' })).toBeNull()
   })
 

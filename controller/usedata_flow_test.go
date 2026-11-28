@@ -156,7 +156,7 @@ func TestGetAllFlowQuotaDatesFiltersByExactModelName(t *testing.T) {
 	require.Empty(t, wildcardPayload.Data)
 }
 
-func TestGetUserFlowQuotaDatesFiltersByExactModelName(t *testing.T) {
+func TestGetUserFlowQuotaDatesIgnoresModelName(t *testing.T) {
 	setupFlowControllerTestDB(t)
 
 	recorder := httptest.NewRecorder()
@@ -167,18 +167,8 @@ func TestGetUserFlowQuotaDatesFiltersByExactModelName(t *testing.T) {
 	GetUserFlowQuotaDates(ctx)
 
 	payload := decodeFlowQuotaResponse(t, recorder)
-	require.Empty(t, payload.Data)
-
-	matched := httptest.NewRecorder()
-	matchedCtx, _ := gin.CreateTestContext(matched)
-	matchedCtx.Set("id", 1)
-	matchedCtx.Request = httptest.NewRequest(http.MethodGet, "/api/data/flow/self?start_timestamp=1000&end_timestamp=2000&model_name=gpt-a", nil)
-
-	GetUserFlowQuotaDates(matchedCtx)
-
-	matchedPayload := decodeFlowQuotaResponse(t, matched)
-	require.Len(t, matchedPayload.Data, 1)
-	require.Equal(t, "gpt-a", matchedPayload.Data[0].ModelName)
+	require.Len(t, payload.Data, 1)
+	require.Equal(t, "gpt-a", payload.Data[0].ModelName)
 }
 
 func TestGetUserFlowQuotaDatesRejectsInvalidTimeRange(t *testing.T) {

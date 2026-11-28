@@ -55,7 +55,7 @@ vi.mock('../hourly-comparison-chart', () => ({
 describe('model call analytics trend view', () => {
   test('shows the day comparison for the call trend by default and can switch to the time range chart', async () => {
     const user = userEvent.setup()
-    render(<ModelCharts data={[]} username='alice' />)
+    render(<ModelCharts data={[]} username='alice' allowDayComparison />)
 
     expect(await screen.findByTestId('day-comparison')).toHaveTextContent(
       'calls:alice'
@@ -70,7 +70,7 @@ describe('model call analytics trend view', () => {
 
   test('hides the trend view switch on the other analytics tabs', async () => {
     const user = userEvent.setup()
-    render(<ModelCharts data={[]} />)
+    render(<ModelCharts data={[]} allowDayComparison />)
 
     await user.click(
       screen.getByRole('button', { name: 'Call Count Distribution' })
@@ -80,5 +80,15 @@ describe('model call analytics trend view', () => {
       screen.queryByRole('button', { name: 'Day comparison' })
     ).not.toBeInTheDocument()
     expect(screen.queryByTestId('day-comparison')).not.toBeInTheDocument()
+  })
+
+  test('keeps the original time range chart when day comparison is not allowed', async () => {
+    render(<ModelCharts data={[]} username='alice' />)
+
+    expect(
+      screen.queryByRole('button', { name: 'Day comparison' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByTestId('day-comparison')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('range-chart')).toBeVisible()
   })
 })

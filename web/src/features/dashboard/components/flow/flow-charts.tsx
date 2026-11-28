@@ -325,8 +325,12 @@ export function FlowCharts(props: FlowChartsProps) {
     ]
   )
   const flowQueryParams = useMemo(
-    () => buildQueryParams(timeRange, props.filters),
-    [props.filters, timeRange]
+    () =>
+      buildQueryParams(timeRange, {
+        ...props.filters,
+        model_name: isAdmin ? props.filters?.model_name : undefined,
+      }),
+    [isAdmin, props.filters, timeRange]
   )
 
   const {

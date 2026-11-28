@@ -309,7 +309,7 @@ export function Dashboard() {
           currentFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
-          includeModelName
+          includeModelName={isAdmin}
           titleKey='Flow Filters'
           descriptionKey='Filter the traffic flow view by time range, model, and user.'
         />
@@ -355,22 +355,26 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
-              <FadeIn delay={0.05}>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyHourlyComparisonChart
-                    kind='quota'
-                    username={modelFilters.username}
-                  />
-                </Suspense>
-              </FadeIn>
-              <FadeIn delay={0.05}>
-                <Suspense fallback={<ModelChartsFallback />}>
-                  <LazyHourlyComparisonChart
-                    kind='tokens'
-                    username={modelFilters.username}
-                  />
-                </Suspense>
-              </FadeIn>
+              {isAdmin && (
+                <>
+                  <FadeIn delay={0.05}>
+                    <Suspense fallback={<ModelChartsFallback />}>
+                      <LazyHourlyComparisonChart
+                        kind='quota'
+                        username={modelFilters.username}
+                      />
+                    </Suspense>
+                  </FadeIn>
+                  <FadeIn delay={0.05}>
+                    <Suspense fallback={<ModelChartsFallback />}>
+                      <LazyHourlyComparisonChart
+                        kind='tokens'
+                        username={modelFilters.username}
+                      />
+                    </Suspense>
+                  </FadeIn>
+                </>
+              )}
               {isAdmin && (
                 <>
                   <FadeIn delay={0.05}>
@@ -408,6 +412,7 @@ export function Dashboard() {
                     chartTimeRange={modelChartTimeRange}
                     defaultChartTab={chartPreferences.modelAnalyticsChart}
                     username={modelFilters.username}
+                    allowDayComparison={isAdmin}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }
