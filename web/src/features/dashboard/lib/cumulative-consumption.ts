@@ -23,6 +23,7 @@ import { getEndOfDay, getStartOfDay } from '@/lib/time'
 export const CUMULATIVE_COMPARE_LOOKBACK_DAYS = 30
 
 const HOURS_IN_DAY = 24
+const TOKENS_PER_HUNDRED_MILLION = 100_000_000
 
 export type CumulativeDayKind = 'today' | 'yesterday' | 'lastWeek' | 'compare'
 
@@ -214,17 +215,26 @@ export function buildCumulativeConsumptionSeries(input: {
   return series
 }
 
+interface ChartTooltipDatum {
+  hour: string
+  series: string
+  value: number | null
+  hourly?: number
+}
+
 export function buildCumulativeConsumptionSpec(input: {
-  points: CumulativeConsumptionPoint[]
+  points: Array<ChartTooltipDatum & { kind?: CumulativeDayKind }>
   resolvedTheme: string
   formatValue: (value: number) => string
-  formatPoint: (point: CumulativeConsumptionPoint) => string
+  formatPoint: (point: ChartTooltipDatum) => string
 }) {
   const seriesOrder: string[] = []
   let maxValue = 0
   for (const point of input.points) {
     if (!seriesOrder.includes(point.series)) seriesOrder.push(point.series)
-    if (point.value > maxValue) maxValue = point.value
+    if (typeof point.value === 'number' && point.value > maxValue) {
+      maxValue = point.value
+    }
   }
   const palette = getDashboardChartColors(Math.max(seriesOrder.length, 1))
   const textColor =
@@ -238,6 +248,7 @@ export function buildCumulativeConsumptionSpec(input: {
 
   return {
     type: 'line' as const,
+    invalidType: 'break' as const,
     data: [{ id: 'cumulative-consumption', values: input.points }],
     xField: 'hour',
     yField: 'value',
@@ -255,18 +266,16 @@ export function buildCumulativeConsumptionSpec(input: {
       dimension: {
         content: [
           {
-            key: (datum: CumulativeConsumptionPoint) => datum.series,
-            value: (datum: CumulativeConsumptionPoint) =>
-              input.formatPoint(datum),
+            key: (datum: ChartTooltipDatum) => datum.series,
+            value: (datum: ChartTooltipDatum) => input.formatPoint(datum),
           },
         ],
       },
       mark: {
         content: [
           {
-            key: (datum: CumulativeConsumptionPoint) => datum.series,
-            value: (datum: CumulativeConsumptionPoint) =>
-              input.formatPoint(datum),
+            key: (datum: ChartTooltipDatum) => datum.series,
+            value: (datum: ChartTooltipDatum) => input.formatPoint(datum),
           },
         ],
       },
@@ -301,4 +310,151 @@ export function buildCumulativeConsumptionSpec(input: {
     background: { fill: 'transparent' },
     animation: false,
   }
+}
+
+export interface HourlyUnitCostPoint {
+  hour: string
+  hourIndex: number
+  series: string
+  kind: CumulativeDayKind
+  // Null when the hour has no tokens, so the line breaks instead of plotting a fake zero.
+  value: number | null
+}
+
+export interface HourlyUnitCostAverage {
+  series: string
+  kind: CumulativeDayKind
+  value: number | null
+}
+
+export function quotaPerHundredMillionTokens(
+  quota: number,
+  tokens: number
+): number | null {
+  if (!Number.isFinite(quota) || !Number.isFinite(tokens) || tokens <= 0) {
+    return null
+  }
+  return (quota / tokens) * TOKENS_PER_HUNDRED_MILLION
+}
+
+function accumulateQuotaAndTokens(
+  rows: HourlyQuotaPoint[],
+  day: Date,
+  capAt?: Date
+): { quota: number[]; tokens: number[] } {
+  const quota = Array.from({ length: HOURS_IN_DAY }, () => 0)
+  const tokens = Array.from({ length: HOURS_IN_DAY }, () => 0)
+  const dayKey = localDayKey(day)
+  for (const row of rows) {
+    if (!Number.isFinite(row.created_at)) continue
+    const instant = new Date(row.created_at * 1000)
+    if (localDayKey(instant) !== dayKey) continue
+    if (capAt && instant.getTime() > capAt.getTime()) continue
+    const hour = instant.getHours()
+    quota[hour] += Number.isFinite(row.quota) ? row.quota : 0
+    const used = row.token_used ?? 0
+    tokens[hour] += Number.isFinite(used) ? used : 0
+  }
+  return { quota, tokens }
+}
+
+function toUnitCostSeries(
+  buckets: { quota: number[]; tokens: number[] },
+  lastHour: number,
+  series: string,
+  kind: CumulativeDayKind
+): { points: HourlyUnitCostPoint[]; average: HourlyUnitCostAverage } {
+  const end = Math.min(HOURS_IN_DAY - 1, Math.max(0, lastHour))
+  const points: HourlyUnitCostPoint[] = []
+  let quotaTotal = 0
+  let tokenTotal = 0
+  for (let hour = 0; hour <= end; hour += 1) {
+    const quota = buckets.quota[hour] ?? 0
+    const tokens = buckets.tokens[hour] ?? 0
+    quotaTotal += quota
+    tokenTotal += tokens
+    points.push({
+      hour: formatHourLabel(hour),
+      hourIndex: hour,
+      series,
+      kind,
+      value: quotaPerHundredMillionTokens(quota, tokens),
+    })
+  }
+  return {
+    points,
+    average: {
+      series,
+      kind,
+      value: quotaPerHundredMillionTokens(quotaTotal, tokenTotal),
+    },
+  }
+}
+
+export function buildHourlyUnitCostSeries(input: {
+  points: HourlyQuotaPoint[]
+  now: Date
+  compareDate?: Date | null
+  labels: CumulativeConsumptionLabels
+}): { points: HourlyUnitCostPoint[]; averages: HourlyUnitCostAverage[] } {
+  const days: Array<{
+    buckets: { quota: number[]; tokens: number[] }
+    lastHour: number
+    series: string
+    kind: CumulativeDayKind
+  }> = [
+    {
+      buckets: accumulateQuotaAndTokens(input.points, input.now, input.now),
+      lastHour: input.now.getHours(),
+      series: input.labels.today,
+      kind: 'today',
+    },
+    {
+      buckets: accumulateQuotaAndTokens(
+        input.points,
+        shiftLocalDays(input.now, -1)
+      ),
+      lastHour: HOURS_IN_DAY - 1,
+      series: input.labels.yesterday,
+      kind: 'yesterday',
+    },
+    {
+      buckets: accumulateQuotaAndTokens(
+        input.points,
+        shiftLocalDays(input.now, -7)
+      ),
+      lastHour: HOURS_IN_DAY - 1,
+      series: input.labels.lastWeek,
+      kind: 'lastWeek',
+    },
+  ]
+
+  if (
+    input.compareDate &&
+    isSelectableCompareDay(input.compareDate, input.now) &&
+    localDayKey(input.compareDate) !==
+      localDayKey(shiftLocalDays(input.now, -7))
+  ) {
+    const compareDay = getStartOfDay(input.compareDate)
+    days.push({
+      buckets: accumulateQuotaAndTokens(input.points, compareDay),
+      lastHour: HOURS_IN_DAY - 1,
+      series: formatCumulativeDayLabel(compareDay),
+      kind: 'compare',
+    })
+  }
+
+  const points: HourlyUnitCostPoint[] = []
+  const averages: HourlyUnitCostAverage[] = []
+  for (const day of days) {
+    const series = toUnitCostSeries(
+      day.buckets,
+      day.lastHour,
+      day.series,
+      day.kind
+    )
+    points.push(...series.points)
+    averages.push(series.average)
+  }
+  return { points, averages }
 }

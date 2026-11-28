@@ -577,6 +577,10 @@ export const STATIC_I18N_KEYS = [
   'Call Trend',
   'Compare cumulative calls by time of day',
   'Failed to load call trend',
+  'Cost per 100M tokens',
+  'Compare hourly cost per 100 million tokens, including each day average',
+  'Failed to load token unit cost',
+  'Average',
 
   // Dashboard time ranges & health windows
   '1 Day',

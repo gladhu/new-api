@@ -18,7 +18,14 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
-import { Coins, LineChart, Activity, X, type LucideIcon } from 'lucide-react'
+import {
+  Coins,
+  LineChart,
+  Activity,
+  BadgeDollarSign,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -33,6 +40,7 @@ import { getCumulativeQuota } from '@/features/dashboard/api'
 import {
   buildCumulativeConsumptionSeries,
   buildCumulativeConsumptionSpec,
+  buildHourlyUnitCostSeries,
   formatCumulativeDayLabel,
   getCumulativeCompareBounds,
   getCumulativeQueryRange,
@@ -46,7 +54,7 @@ import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 import { useAuthStore } from '@/stores/auth-store'
 
-export type HourlyComparisonKind = 'quota' | 'tokens' | 'calls'
+export type HourlyComparisonKind = 'quota' | 'tokens' | 'calls' | 'unitCost'
 
 interface HourlyComparisonConfig {
   titleKey: string
@@ -92,6 +100,16 @@ const HOURLY_COMPARISON_CONFIGS: Record<
     metrics: [{ value: 'count', labelKey: 'Call Trend' }],
     formatAxis: (value) => formatCompactNumber(value),
     formatValue: (value) => formatNumber(value),
+  },
+  unitCost: {
+    titleKey: 'Cost per 100M tokens',
+    descriptionKey:
+      'Compare hourly cost per 100 million tokens, including each day average',
+    errorKey: 'Failed to load token unit cost',
+    icon: BadgeDollarSign,
+    metrics: [],
+    formatAxis: (value) => formatQuota(value),
+    formatValue: (value) => formatQuota(value),
   },
 }
 
@@ -155,34 +173,74 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
   }, [models, selectedModel, t])
 
   const fetchedAt = query.dataUpdatedAt
+  const comparisonNow = useMemo(
+    () => (fetchedAt > 0 ? new Date(fetchedAt) : new Date()),
+    [fetchedAt]
+  )
+  const comparisonLabels = useMemo(
+    () => ({
+      today: t('Today'),
+      yesterday: t('Yesterday'),
+      lastWeek: t('Same day last week'),
+    }),
+    [t]
+  )
+  const isUnitCost = props.kind === 'unitCost'
+  const unitCost = useMemo(() => {
+    if (!isUnitCost || !query.isSuccess) return null
+    return buildHourlyUnitCostSeries({
+      points: query.data?.points ?? [],
+      now: comparisonNow,
+      compareDate,
+      labels: comparisonLabels,
+    })
+  }, [
+    compareDate,
+    comparisonLabels,
+    comparisonNow,
+    isUnitCost,
+    query.data?.points,
+    query.isSuccess,
+  ])
   const series = useMemo(() => {
-    if (!query.isSuccess) return []
+    if (!query.isSuccess || isUnitCost) return []
     return buildCumulativeConsumptionSeries({
       points: query.data?.points ?? [],
       metric,
-      now: fetchedAt > 0 ? new Date(fetchedAt) : new Date(),
+      now: comparisonNow,
       compareDate,
-      labels: {
-        today: t('Today'),
-        yesterday: t('Yesterday'),
-        lastWeek: t('Same day last week'),
-      },
+      labels: comparisonLabels,
     })
-  }, [compareDate, fetchedAt, metric, query.data?.points, query.isSuccess, t])
+  }, [
+    compareDate,
+    comparisonLabels,
+    comparisonNow,
+    isUnitCost,
+    metric,
+    query.data?.points,
+    query.isSuccess,
+  ])
 
   const todayTotal =
     [...series].reverse().find((point) => point.kind === 'today')?.value ?? 0
+  const chartPoints = useMemo(
+    () => (isUnitCost ? (unitCost?.points ?? []) : series),
+    [isUnitCost, series, unitCost]
+  )
 
   const spec = useMemo(() => {
     if (!query.isSuccess) return null
     return buildCumulativeConsumptionSpec({
-      points: series,
+      points: chartPoints,
       resolvedTheme,
       formatValue: config.formatAxis,
-      formatPoint: (point) =>
-        `${config.formatValue(point.value)} (${t('This hour')} ${config.formatValue(point.hourly)})`,
+      formatPoint: (point) => {
+        if (point.value == null) return t('No data')
+        if (isUnitCost) return config.formatValue(point.value)
+        return `${config.formatValue(point.value)} (${t('This hour')} ${config.formatValue(point.hourly ?? 0)})`
+      },
     })
-  }, [config, query.isSuccess, resolvedTheme, series, t])
+  }, [chartPoints, config, isUnitCost, query.isSuccess, resolvedTheme, t])
 
   const compareLabel = compareDate
     ? `${t('Compare another day')}: ${formatCumulativeDayLabel(compareDate)}`
@@ -200,7 +258,7 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
   } else if (themeReady && spec) {
     chartBody = (
       <VChart
-        key={`${metric}-${selectedModel}-${compareDate?.getTime() ?? 'none'}-${resolvedTheme}-${series.length}`}
+        key={`${metric}-${selectedModel}-${compareDate?.getTime() ?? 'none'}-${resolvedTheme}-${chartPoints.length}`}
         spec={{
           ...spec,
           theme: resolvedTheme === 'dark' ? 'dark' : 'light',
@@ -218,6 +276,19 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
       {t('Today')} {config.formatValue(todayTotal)}
     </span>
   ) : null
+  const averageSummary =
+    isUnitCost && unitCost ? (
+      <span className='text-muted-foreground text-xs'>
+        {t('Average')}{' '}
+        {unitCost.averages.map((item, index) => (
+          <span key={item.kind}>
+            {index > 0 ? ' · ' : ''}
+            {item.series}{' '}
+            {item.value == null ? t('No data') : config.formatValue(item.value)}
+          </span>
+        ))}
+      </span>
+    ) : null
 
   const titleId = `hourly-comparison-${props.kind}-title`
   const modelId = `hourly-comparison-${props.kind}-model`
@@ -235,7 +306,7 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
       <div className='flex w-full flex-col gap-2 border-b px-3 py-2 sm:gap-3 sm:px-5 sm:py-3 lg:flex-row lg:items-center lg:justify-between'>
         {props.embedded ? (
           <div className='flex flex-wrap items-baseline gap-x-2'>
-            {todaySummary}
+            {averageSummary ?? todaySummary}
           </div>
         ) : (
           <div className='flex min-w-0 items-center gap-2'>
@@ -247,7 +318,7 @@ export function HourlyComparisonChart(props: HourlyComparisonChartProps) {
                 <div id={titleId} className='text-sm font-semibold'>
                   {t(config.titleKey)}
                 </div>
-                {todaySummary}
+                {averageSummary ?? todaySummary}
               </div>
               <div className='text-muted-foreground text-xs'>
                 {t(config.descriptionKey)}

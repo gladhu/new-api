@@ -212,6 +212,31 @@ describe('hourly comparison chart controls', () => {
     expect(getCumulativeQuota).toHaveBeenCalledTimes(1)
   })
 
+  test('shows each day average for the token unit cost and no token tabs', async () => {
+    signInAsAdmin()
+    getCumulativeQuota.mockResolvedValue({
+      models: ['gpt-4o'],
+      points: [
+        {
+          created_at: Math.floor(Date.now() / 1000),
+          quota: 500_000,
+          token_used: 1_000_000,
+        },
+      ],
+    })
+
+    renderChart(undefined, 'unitCost')
+
+    expect(
+      screen.getByRole('region', { name: 'Cost per 100M tokens' })
+    ).toBeVisible()
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+    expect(await screen.findByText(/Average/)).toBeVisible()
+    expect(screen.getByText(/Today/)).toBeVisible()
+    expect(screen.getByText(/Yesterday/)).toBeVisible()
+    expect(screen.getByText(/Same day last week/)).toBeVisible()
+  })
+
   test('shows the call trend error and no token tabs when the request fails', async () => {
     signInAsAdmin()
     getCumulativeQuota.mockRejectedValue(new Error('down'))

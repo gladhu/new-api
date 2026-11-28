@@ -21,8 +21,10 @@ import { describe, expect, test } from 'vitest'
 import {
   buildCumulativeConsumptionSeries,
   buildCumulativeConsumptionSpec,
+  buildHourlyUnitCostSeries,
   getCumulativeQueryRange,
   isSelectableCompareDay,
+  quotaPerHundredMillionTokens,
 } from '@/features/dashboard/lib/cumulative-consumption'
 
 const labels = {
@@ -226,5 +228,113 @@ describe('cumulative consumption comparison', () => {
       throw new Error('missing tooltip point')
     }
     expect(tooltipValue(first)).toBe('0/0')
+  })
+})
+
+describe('hourly cost per 100 million tokens', () => {
+  const now = new Date(2026, 9, 29, 15, 30, 0)
+
+  test('prices each hour from that hour spend and tokens, and averages by the day total', () => {
+    const series = buildHourlyUnitCostSeries({
+      now,
+      labels,
+      points: [
+        {
+          created_at: unix(new Date(2026, 9, 29, 10, 0, 0)),
+          quota: 100,
+          token_used: 100,
+        },
+        {
+          created_at: unix(new Date(2026, 9, 29, 10, 0, 0)),
+          quota: 100,
+          token_used: 900,
+        },
+        {
+          created_at: unix(new Date(2026, 9, 29, 11, 0, 0)),
+          quota: 50,
+          token_used: 0,
+        },
+        {
+          created_at: unix(new Date(2026, 9, 29, 16, 0, 0)),
+          quota: 999,
+          token_used: 999,
+        },
+        {
+          created_at: unix(new Date(2026, 9, 28, 8, 0, 0)),
+          quota: 30,
+          token_used: 300,
+        },
+      ],
+    })
+
+    const today = series.points.filter((point) => point.kind === 'today')
+    const yesterday = series.points.filter(
+      (point) => point.kind === 'yesterday'
+    )
+    expect(today).toHaveLength(16)
+    expect(today[10]).toMatchObject({
+      hour: '10:00',
+      value: quotaPerHundredMillionTokens(200, 1000),
+    })
+    expect(today[11]?.value).toBeNull()
+    expect(today.some((point) => point.hour === '16:00')).toBe(false)
+    expect(yesterday).toHaveLength(24)
+    expect(yesterday[8]?.value).toBe(quotaPerHundredMillionTokens(30, 300))
+
+    const todayAverage = series.averages.find((item) => item.kind === 'today')
+    expect(todayAverage?.value).toBe(quotaPerHundredMillionTokens(250, 1000))
+    expect(todayAverage?.value).not.toBe(
+      quotaPerHundredMillionTokens(200, 1000)
+    )
+  })
+
+  test('leaves the average empty when a day has no tokens and skips a duplicate last-week curve', () => {
+    const series = buildHourlyUnitCostSeries({
+      now,
+      labels,
+      compareDate: new Date(2026, 9, 22),
+      points: [
+        {
+          created_at: unix(new Date(2026, 9, 22, 9, 0, 0)),
+          quota: 40,
+          token_used: 400,
+        },
+      ],
+    })
+
+    expect(series.averages.map((item) => item.kind)).toEqual([
+      'today',
+      'yesterday',
+      'lastWeek',
+    ])
+    expect(series.averages.find((item) => item.kind === 'today')?.value).toBe(
+      null
+    )
+    const lastWeek = series.points.filter((point) => point.kind === 'lastWeek')
+    expect(lastWeek).toHaveLength(24)
+    expect(lastWeek[9]?.value).toBe(quotaPerHundredMillionTokens(40, 400))
+  })
+
+  test('adds another day inside the last month', () => {
+    const series = buildHourlyUnitCostSeries({
+      now,
+      labels,
+      compareDate: new Date(2026, 9, 27, 18, 0, 0),
+      points: [
+        {
+          created_at: unix(new Date(2026, 9, 27, 1, 0, 0)),
+          quota: 5,
+          token_used: 50,
+        },
+      ],
+    })
+
+    const compare = series.points.filter((point) => point.kind === 'compare')
+    expect(compare).toHaveLength(24)
+    expect(compare[0]?.series).toBe('2026-10-27')
+    expect(compare[1]?.value).toBe(quotaPerHundredMillionTokens(5, 50))
+    expect(series.averages.find((item) => item.kind === 'compare')?.value).toBe(
+      quotaPerHundredMillionTokens(5, 50)
+    )
   })
 })

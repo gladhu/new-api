@@ -373,6 +373,14 @@ export function Dashboard() {
                       />
                     </Suspense>
                   </FadeIn>
+                  <FadeIn delay={0.05}>
+                    <Suspense fallback={<ModelChartsFallback />}>
+                      <LazyHourlyComparisonChart
+                        kind='unitCost'
+                        username={modelFilters.username}
+                      />
+                    </Suspense>
+                  </FadeIn>
                 </>
               )}
               {isAdmin && (
